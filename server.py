@@ -12,12 +12,12 @@ EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 
-# 🟢 NATASHA MAE'S PAID KEY (Hardcoded)
+# 🟢 NATASHA MAE'S PAID KEY
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN (Approved Logic) ---
+# --- THE BRAIN ---
 SYSTEM_PROMPT = """
-You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
+You are "Sarah," the Booking Concierge for **Natasha Mae's Enterprises**.
 **Tone:** Elegant, warm, polished, and patient. You are the "First Impression" of a luxury experience.
 
 **CONTEXT - 3 LOCATIONS:**
@@ -35,16 +35,54 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (Jessica)"
+    return "Natasha Mae's Server Online"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
-    print("📞 Incoming Call (Natasha Mae's)")
+    data = request.json
+    print(f"📞 Received Data at /inbound")
+
+    # --- CHECK IF THIS IS A REPORT OR A CALL ---
+    message_type = data.get('message', {}).get('type')
+
+    # 1. HANDLE END OF CALL REPORT (SEND EMAIL)
+    if message_type == 'end-of-call-report':
+        print("📝 End of Call Report Received. Attempting Email...")
+        try:
+            call = data.get('message', data)
+            summary = call.get('summary', 'No summary provided.')
+            transcript = call.get('transcript', 'No transcript provided.')
+            
+            # Create Email
+            msg = MIMEMultipart()
+            msg['From'] = EMAIL_SENDER
+            msg['To'] = EMAIL_RECEIVER
+            msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
+            
+            body = f"Call Summary:\n{summary}\n\n---\n\nTranscript:\n{transcript}"
+            msg.attach(MIMEText(body, 'plain'))
+            
+            # Send Email
+            if not EMAIL_SENDER or not EMAIL_PASSWORD:
+                print("❌ Error: Missing EMAIL_SENDER or EMAIL_PASSWORD in Render Settings.")
+                return jsonify({"status": "Missing Credentials"}), 200
+
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            print("✅ Email Sent Successfully!")
+        except Exception as e:
+            print(f"❌ Email Failed: {e}")
+        
+        return jsonify({"status": "Report Received"}), 200
+
+    # 2. HANDLE INCOMING CALL (START AI)
+    print("🤖 Starting AI Assistant...")
     response = {
         "assistant": {
-            # 🟢 UPDATED GREETING:
-            "firstMessage": "Thank you for calling Natasha Mae's Enterprises. I'm Jessica, Natasha Mae's AI Assistant, I answer questions and take messages; how can I be of service today?",
-            
+            "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Sarah. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
             "model": {
                 "provider": "openai",
                 "model": "gpt-4o-mini",
@@ -59,12 +97,11 @@ def inbound_call():
                                 "type": "object",
                                 "properties": {
                                     "phone": {"type": "string", "description": "Customer phone number"},
-                                    "type": {"type": "string", "enum": ["tour", "menu", "brochure", "vault_map", "liberty_map", "frankford_map"]}
+                                    "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
                                 },
                                 "required": ["phone", "type"]
                             }
                         },
-                        # 🟢 UPDATED TO YOUR LIVE RENDER URL
                         "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
                     }
                 ]
@@ -77,7 +114,7 @@ def inbound_call():
             },
             "voice": {
                 "provider": "11labs",
-                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice
+                "voiceId": "21m00Tcm4TlvDq8ikWAM" 
             }
         }
     }
@@ -116,11 +153,12 @@ def send_sms_tool():
 
     req_type = args.get('type', 'brochure').lower()
     
-    # 🟢 🟢 🟢 CLEAN MESSAGES - NO PHOTO ILLUSIONS 🟢 🟢 🟢
+    # --- TEXTBELT "SAFE MODE" ---
     message_map = {
-        "tour": "Please visit natashamaes.com/contact to schedule your VIP tour with Natasha Mae's.",
-        "menu": "Our packages are available at natashamaes.com/packages.",
-        "brochure": "View our full event brochure at natashamaes.com/packages.",
+        "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
+        "packages": "View our full event packages at natashamaes.com/packages.",
+        "registration": "Complete your event registration here: natashamaes.com/register",
+        "invoice": "You can view and pay your invoice securely at natashamaes.com/payment",
         "vault_map": "The Vault is located at 322 High St, Burlington NJ. See you soon!",
         "liberty_map": "Liberty Palace is at 1 Franklin Mills Blvd, Philadelphia. See you soon!",
         "frankford_map": "Our Frankford location is at 4446 Frankford Ave, Philadelphia.",
@@ -142,7 +180,6 @@ def send_sms_tool():
         })
         print(f"Textbelt Result: {resp.text}")
         
-        # Check success
         if resp.json().get('success'):
             return jsonify({"result": "SMS Sent Successfully"}), 200
         else:
@@ -151,29 +188,6 @@ def send_sms_tool():
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"result": "Failed"}), 200
-
-@app.route('/webhook', methods=['POST'])
-def vapi_email_webhook():
-    # EMAIL REPORTING
-    data = request.json
-    if data.get('message', {}).get('type') == 'end-of-call-report':
-        try:
-            call = data.get('message', data)
-            summary = call.get('summary', 'No summary.')
-            
-            msg = MIMEMultipart()
-            msg['From'] = EMAIL_SENDER
-            msg['To'] = EMAIL_RECEIVER
-            msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
-            msg.attach(MIMEText(f"Call Summary:\n{summary}", 'plain'))
-            
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.send_message(msg)
-            server.quit()
-        except: pass
-    return jsonify({"status": "OK"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
