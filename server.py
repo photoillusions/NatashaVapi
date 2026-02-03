@@ -12,7 +12,7 @@ EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 
-# 🟢 NATASHA MAE'S PAID KEY (Hardcoded for instant access)
+# 🟢 NATASHA MAE'S PAID KEY (Hardcoded)
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
 # --- THE BRAIN (Approved Logic) ---
@@ -62,8 +62,8 @@ def inbound_call():
                                 "required": ["phone", "type"]
                             }
                         },
-                        # 🔴 IMPORTANT: AFTER YOU DEPLOY TO RENDER, UPDATE THIS URL BELOW!
-                        "server": {"url": "https://[YOUR_NEW_RENDER_URL_HERE]/send-sms"} 
+                        # 🟢 UPDATED WITH YOUR LIVE RENDER URL
+                        "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
                     }
                 ]
             },
@@ -75,7 +75,7 @@ def inbound_call():
             },
             "voice": {
                 "provider": "11labs",
-                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice (Standard Professional)
+                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice
             }
         }
     }
@@ -114,7 +114,7 @@ def send_sms_tool():
 
     req_type = args.get('type', 'brochure').lower()
     
-    # --- TEXTBELT "SAFE MODE" (Bypassing URL Filter) ---
+    # --- TEXTBELT "SAFE MODE" (No https links yet) ---
     message_map = {
         "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
         "menu": "Our packages are available at natashamaes.com/packages.",
