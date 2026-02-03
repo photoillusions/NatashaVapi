@@ -77,7 +77,7 @@ def inbound_call():
             },
             "voice": {
                 "provider": "11labs",
-                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice (Standard Professional)
+                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice
             }
         }
     }
@@ -116,9 +116,9 @@ def send_sms_tool():
 
     req_type = args.get('type', 'brochure').lower()
     
-    # --- TEXTBELT "SAFE MODE" (No https links yet) ---
+    # 🟢 🟢 🟢 CLEAN MESSAGES - NO PHOTO ILLUSIONS 🟢 🟢 🟢
     message_map = {
-        "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
+        "tour": "Please visit natashamaes.com/contact to schedule your VIP tour with Natasha Mae's.",
         "menu": "Our packages are available at natashamaes.com/packages.",
         "brochure": "View our full event brochure at natashamaes.com/packages.",
         "vault_map": "The Vault is located at 322 High St, Burlington NJ. See you soon!",
