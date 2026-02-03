@@ -17,7 +17,7 @@ TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yW
 
 # --- THE BRAIN (Approved Logic) ---
 SYSTEM_PROMPT = """
-You are "Sarah," the Booking Concierge for **Natasha Mae's Enterprises**.
+You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 **Tone:** Elegant, warm, polished, and patient. You are the "First Impression" of a luxury experience.
 
 **CONTEXT - 3 LOCATIONS:**
@@ -35,14 +35,16 @@ You are "Sarah," the Booking Concierge for **Natasha Mae's Enterprises**.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online"
+    return "Natasha Mae's Server Online (Jessica)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     print("📞 Incoming Call (Natasha Mae's)")
     response = {
         "assistant": {
-            "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Sarah. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
+            # 🟢 UPDATED GREETING:
+            "firstMessage": "Thank you for calling Natasha Mae's Enterprises. I'm Jessica, Natasha Mae's AI Assistant, I answer questions and take messages; how can I be of service today?",
+            
             "model": {
                 "provider": "openai",
                 "model": "gpt-4o-mini",
@@ -62,7 +64,7 @@ def inbound_call():
                                 "required": ["phone", "type"]
                             }
                         },
-                        # 🟢 UPDATED WITH YOUR LIVE RENDER URL
+                        # 🟢 UPDATED TO YOUR LIVE RENDER URL
                         "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
                     }
                 ]
@@ -75,7 +77,7 @@ def inbound_call():
             },
             "voice": {
                 "provider": "11labs",
-                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice
+                "voiceId": "21m00Tcm4TlvDq8ikWAM" # Rachel Voice (Standard Professional)
             }
         }
     }
