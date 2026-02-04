@@ -13,7 +13,7 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN (VERSION 3.1: OBEDIENCE + OPTIONAL PHONE) ---
+# --- THE BRAIN ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 **Tone:** Efficient, Polite, and IMMEDIATE.
@@ -41,16 +41,20 @@ If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHIN
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (V3.2 - VAPI Fixed)"
+    return "Natasha Mae's Server Online (V4.0 - Message Filtering)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json
-    print(f"📞 HIT /inbound")
-
-    # --- 1. HANDLE END OF CALL REPORT (SEND EMAIL) ---
     message_type = data.get('message', {}).get('type')
     
+    print(f"📞 HIT /inbound - TYPE: {message_type}")
+
+    # =====================================================
+    # FILTER BY MESSAGE TYPE - THIS IS THE KEY FIX
+    # =====================================================
+    
+    # 1. END OF CALL REPORT - Send email
     if message_type == 'end-of-call-report':
         print("📝 REPORT RECEIVED. Attempting Email...")
         try:
@@ -67,85 +71,94 @@ def inbound_call():
             body = f"Call Summary:\n{summary}\n\n🎧 Audio Recording:\n{recording_url}\n\n---\n\nTranscript:\n{transcript}"
             msg.attach(MIMEText(body, 'plain'))
             
-            if not EMAIL_SENDER or not EMAIL_PASSWORD:
-                return jsonify({"status": "Missing Credentials"}), 200
-
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.send_message(msg)
-            server.quit()
-            print("✅ EMAIL SENT SUCCESSFULLY!")
+            if EMAIL_SENDER and EMAIL_PASSWORD:
+                server = smtplib.SMTP('smtp.gmail.com', 587)
+                server.starttls()
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+                server.quit()
+                print("✅ EMAIL SENT SUCCESSFULLY!")
+            else:
+                print("⚠️ Missing email credentials")
         except Exception as e:
             print(f"❌ EMAIL FAILED: {e}")
         
         return jsonify({"status": "Report Received"}), 200
 
-    # --- 2. HANDLE INCOMING CALL (START AI) ---
-    print("🤖 STARTING AI LOGIC (GPT-4o-mini)...")
-    response = {
-        "assistant": {
-            "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
-            "model": {
-                "provider": "openai",
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
-                "tools": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "send_sms_link",
-                            "description": "Sends a text message with a link/brochure/invoice.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "phone": {"type": "string", "description": "Optional: Customer phone number (System will detect automatically)"},
-                                    "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
-                                },
-                                "required": ["type"] 
-                            }
-                        },
-                        "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
-                    }
-                ]
-            },
-            "transcriber": {
-                "provider": "deepgram",
-                "model": "nova-2",
-                "language": "en-US",
-                "endpointing": 1500
-            },
-            "voice": {
-                "provider": "11labs",
-                "voiceId": "21m00Tcm4TlvDq8ikWAM" 
+    # 2. ASSISTANT REQUEST - Return the assistant config (THIS IS THE REAL START)
+    if message_type == 'assistant-request':
+        print("🤖 ASSISTANT REQUEST - Sending config...")
+        response = {
+            "assistant": {
+                "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
+                "model": {
+                    "provider": "openai",
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "send_sms_link",
+                                "description": "Sends a text message with a link/brochure/invoice to the caller.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string", 
+                                            "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"],
+                                            "description": "The type of information to send"
+                                        }
+                                    },
+                                    "required": ["type"] 
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
+                        }
+                    ]
+                },
+                "transcriber": {
+                    "provider": "deepgram",
+                    "model": "nova-2",
+                    "language": "en-US",
+                    "endpointing": 1500
+                },
+                "voice": {
+                    "provider": "11labs",
+                    "voiceId": "21m00Tcm4TlvDq8ikWAM" 
+                }
             }
         }
-    }
-    return jsonify(response), 200
+        return jsonify(response), 200
+
+    # 3. TOOL CALLS - Route to send-sms handler (backup if VAPI sends here)
+    if message_type == 'tool-calls':
+        print("🔧 TOOL CALL received at /inbound - routing to handler...")
+        return handle_tool_call(data)
+
+    # 4. ALL OTHER MESSAGE TYPES - Just acknowledge, don't send new config
+    # This includes: speech-update, transcript, hang, status-update, etc.
+    print(f"📨 Acknowledged message type: {message_type}")
+    return jsonify({"status": "acknowledged"}), 200
 
 
 # =====================================================
-# FIXED SMS ENDPOINT - CORRECT VAPI RESPONSE FORMAT
+# SMS TOOL HANDLER
 # =====================================================
-@app.route('/send-sms', methods=['POST'])
-def send_sms_tool():
-    print(f"📩 SMS TOOL ACCESSED!") 
-    data = request.json
+def handle_tool_call(data):
+    """Handle the actual SMS sending logic"""
+    print(f"📩 SMS TOOL PROCESSING!") 
     print(f"📦 RAW DATA: {data}")
 
-    # ============================================
-    # 1. EXTRACT THE TOOL CALL ID (CRITICAL!)
-    # ============================================
+    # 1. EXTRACT THE TOOL CALL ID
     tool_call_id = None
     args = {}
     try:
-        # VAPI sends toolCallList with the ID
         tool_call_list = data.get('message', {}).get('toolCallList', [])
         if tool_call_list:
             tool_call_id = tool_call_list[0].get('id')
             args = tool_call_list[0].get('arguments', {})
         else:
-            # Fallback to older format
             tool_calls = data.get('message', {}).get('toolCalls', [])
             if tool_calls:
                 tool_call_id = tool_calls[0].get('id')
@@ -159,9 +172,7 @@ def send_sms_tool():
     print(f"🔑 TOOL CALL ID: {tool_call_id}")
     print(f"📋 ARGUMENTS: {args}")
 
-    # ============================================
     # 2. GET PHONE NUMBER FROM CALL DATA
-    # ============================================
     phone = None
     try:
         call_data = data.get('message', {}).get('call', {})
@@ -178,9 +189,7 @@ def send_sms_tool():
     
     print(f"📱 DETECTED PHONE: {phone}")
 
-    # ============================================
     # 3. CLEAN UP PHONE NUMBER
-    # ============================================
     if phone:
         phone = str(phone).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
         if len(phone) == 10:
@@ -190,9 +199,7 @@ def send_sms_tool():
         elif not phone.startswith("+"):
             phone = f"+{phone}"
 
-    # ============================================
     # 4. BUILD THE MESSAGE
-    # ============================================
     req_type = args.get('type', 'default').lower()
     
     message_map = {
@@ -208,9 +215,7 @@ def send_sms_tool():
     
     message_body = message_map.get(req_type, message_map["default"])
 
-    # ============================================
     # 5. SEND THE TEXT
-    # ============================================
     print(f"🕵️ Attempting Textbelt to: {phone}")
     
     result_message = ""
@@ -242,9 +247,7 @@ def send_sms_tool():
             result_message = f"SMS failed with exception: {str(e)}"
             print(f"❌ {result_message}")
 
-    # ============================================
-    # 6. RETURN IN VAPI'S REQUIRED FORMAT!!!
-    # ============================================
+    # 6. RETURN IN VAPI'S REQUIRED FORMAT
     response = {
         "results": [
             {
@@ -256,6 +259,13 @@ def send_sms_tool():
     
     print(f"📤 RETURNING TO VAPI: {response}")
     return jsonify(response), 200
+
+
+@app.route('/send-sms', methods=['POST'])
+def send_sms_tool():
+    """Direct endpoint for tool calls"""
+    print(f"📩 DIRECT HIT TO /send-sms!")
+    return handle_tool_call(request.json)
 
 
 if __name__ == '__main__':
