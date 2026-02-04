@@ -47,7 +47,7 @@ If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHIN
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (Email Gateway Edition)"
+    return "Natasha Mae's Server Online (ClickSend SMS Edition v2)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -88,28 +88,9 @@ def inbound_call():
                     "provider": "openai",
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
-                    "tools": [
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": "send_sms_link",
-                                "description": "Sends a text message with a clickable link.",
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]
-                                        }
-                                    },
-                                    "required": ["type"]
-                                }
-                            },
-                            # 🔴 UPDATE THIS URL TO YOUR RENDER URL
-                            "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
-                        }
-                    ]
+                    "toolIds": ["8bc95305-e18f-4cf3-8a43-a02241d215e4"]
                 },
+                "serverMessages": ["conversation-update", "end-of-call-report", "speech-update", "status-update", "tool-calls", "assistant.started"],
                 "transcriber": {"provider": "deepgram", "model": "nova-2", "language": "en-US"},
                 "voice": {"provider": "11labs", "voiceId": "21m00Tcm4TlvDq8ikWAM"}
             }
