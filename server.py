@@ -13,22 +13,27 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN ---
+# --- THE BRAIN (UPDATED: STRICTER RULES) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
-**Tone:** Elegant, warm, polished, and patient. You are the "First Impression" of a luxury experience.
+**Tone:** Elegant, warm, polished, and patient.
 
 **CONTEXT - 3 LOCATIONS:**
-1. **Natasha Mae's Banquet Facility:** 4446 Frankford Ave, Philadelphia. (Intimate, classic, <100 guests).
-2. **Mae's Liberty Palace:** 1 Franklin Mills Blvd, Philadelphia. (Grand ballroom, 150-250 guests).
-3. **The Vault Ballroom:** 322 High Street, Burlington, NJ. (Historic, original bank vaults, unique luxury).
+1. **Frankford Ave** (Philly): Intimate, <100 guests.
+2. **Liberty Palace** (Franklin Mills): Grand ballroom, 150-250 guests.
+3. **The Vault** (Burlington, NJ): Historic, luxury, original bank vaults.
 
-**CRITICAL RULES:**
-1. **Identify the Venue:** Early in the call, ask if they are looking for the **Frankford**, **Franklin Mills**, or **Burlington (The Vault)** location.
-2. **The Goal = TOUR:** Your primary goal is to schedule a VIP Tour. Do not quote final prices over the phone; say "Packages are customizable, come see the room."
-3. **Guest Count:** Always ask for guest count to ensure they fit the room.
-4. **Caller ID:** You HAVE their number. NEVER ask for it.
-5. **SMS Tool:** If they want a brochure, menu, invoice, or registration link, say: "I've sent that to your mobile phone just now." and use the tool.
+**⛔️ CRITICAL RULE: DO NOT LIE ABOUT TEXTING**
+If the user asks for a brochure, tour link, map, invoice, or registration:
+1. You **MUST** use the `send_sms_link` tool.
+2. Do **NOT** say "I sent it" unless you have actually triggered the tool.
+3. If they ask "Can you text me?", simply say: "Sending that to your mobile now" and TRIGGER THE TOOL immediately.
+
+**Types of info you can text:**
+- 'tour' (Scheduling Calendar)
+- 'packages' (Brochures)
+- 'vault_map' (GPS)
+- 'invoice' (Payment)
 """
 
 @app.route('/', methods=['GET'])
@@ -38,7 +43,7 @@ def home():
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json
-    print(f"📞 HIT /inbound: Checking message type...")
+    print(f"📞 HIT /inbound")
 
     # --- 1. HANDLE END OF CALL REPORT (SEND EMAIL) ---
     message_type = data.get('message', {}).get('type')
@@ -51,10 +56,8 @@ def inbound_call():
             transcript = call.get('transcript', 'No transcript provided.')
             
             msg = MIMEMultipart()
-            
-            # 🟢 MASKING THE NAME HERE
+            # 🟢 MASKED NAME FIX
             msg['From'] = f"Natasha Booking Concierge <{EMAIL_SENDER}>"
-            
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
             
@@ -90,11 +93,11 @@ def inbound_call():
                         "type": "function",
                         "function": {
                             "name": "send_sms_link",
-                            "description": "Sends a text message with a link.",
+                            "description": "Sends a text message to the caller.",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
-                                    "phone": {"type": "string", "description": "Customer phone number"},
+                                    "phone": {"type": "string", "description": "The user's phone number."},
                                     "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
                                 },
                                 "required": ["phone", "type"]
@@ -120,8 +123,10 @@ def inbound_call():
 
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
+    # 🟢 DEBUG PRINT: If you don't see this, Vapi didn't call the tool
+    print(f"📩 SMS TOOL ACCESSED!") 
+    
     data = request.json
-    print(f"📩 SMS TRIGGERED")
 
     # 1. SMART NUMBER DETECTION
     system_phone = None
@@ -151,7 +156,6 @@ def send_sms_tool():
 
     req_type = args.get('type', 'brochure').lower()
     
-    # --- TEXT CONTENT ---
     message_map = {
         "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
         "packages": "View our full event packages at natashamaes.com/packages.",
@@ -165,12 +169,9 @@ def send_sms_tool():
     
     message_body = message_map.get(req_type, message_map["default"])
 
-    print(f"🕵️ Sending SMS to: {phone}")
+    print(f"🕵️ Attempting Textbelt to: {phone}")
 
     try:
-        if not TEXTBELT_KEY:
-             return jsonify({"result": "Error: Missing TEXTBELT_KEY"}), 200
-
         resp = requests.post('https://textbelt.com/text', {
             'phone': phone,
             'message': message_body, 
