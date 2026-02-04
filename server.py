@@ -27,21 +27,23 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHING** and trigger the `send_sms_link` tool immediately.
 
 **RULES OF ENGAGEMENT:**
-1. **YOU ALREADY HAVE THE PHONE NUMBER:** Do not ask for it. Do not worry about it. Just trigger the tool.
+1. **YOU ALREADY HAVE THE PHONE NUMBER:** Do not ask for it. Just trigger the tool.
 2. **DO NOT** ask qualifying questions if they just want a text.
 3. **JUST SEND IT.**
 
 **Tool Parameters (Type):**
-- 'tour' (Scheduling Calendar)
-- 'packages' (Brochures)
+- 'tour' (Scheduling Info)
+- 'packages' (Brochure Info)
 - 'registration' (Forms)
-- 'invoice' (Payment)
-- 'vault_map' (GPS)
+- 'invoice' (Payment Info)
+- 'vault_map' (GPS Address)
+- 'liberty_map' (GPS Address)
+- 'frankford_map' (GPS Address)
 """
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (V4.0 - Message Filtering)"
+    return "Natasha Mae's Server Online (Ultra-Safe Mode)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -50,10 +52,6 @@ def inbound_call():
     
     print(f"📞 HIT /inbound - TYPE: {message_type}")
 
-    # =====================================================
-    # FILTER BY MESSAGE TYPE - THIS IS THE KEY FIX
-    # =====================================================
-    
     # 1. END OF CALL REPORT - Send email
     if message_type == 'end-of-call-report':
         print("📝 REPORT RECEIVED. Attempting Email...")
@@ -85,7 +83,7 @@ def inbound_call():
         
         return jsonify({"status": "Report Received"}), 200
 
-    # 2. ASSISTANT REQUEST - Return the assistant config (THIS IS THE REAL START)
+    # 2. ASSISTANT REQUEST - Return the assistant config
     if message_type == 'assistant-request':
         print("🤖 ASSISTANT REQUEST - Sending config...")
         response = {
@@ -100,7 +98,7 @@ def inbound_call():
                             "type": "function",
                             "function": {
                                 "name": "send_sms_link",
-                                "description": "Sends a text message with a link/brochure/invoice to the caller.",
+                                "description": "Sends a text message with info/address to the caller.",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -131,14 +129,11 @@ def inbound_call():
         }
         return jsonify(response), 200
 
-    # 3. TOOL CALLS - Route to send-sms handler (backup if VAPI sends here)
+    # 3. TOOL CALLS - Route to send-sms handler
     if message_type == 'tool-calls':
         print("🔧 TOOL CALL received at /inbound - routing to handler...")
         return handle_tool_call(data)
 
-    # 4. ALL OTHER MESSAGE TYPES - Just acknowledge, don't send new config
-    # This includes: speech-update, transcript, hang, status-update, etc.
-    print(f"📨 Acknowledged message type: {message_type}")
     return jsonify({"status": "acknowledged"}), 200
 
 
@@ -148,11 +143,10 @@ def inbound_call():
 def handle_tool_call(data):
     """Handle the actual SMS sending logic"""
     print(f"📩 SMS TOOL PROCESSING!") 
-    print(f"📦 RAW DATA: {data}")
 
-    # 1. EXTRACT THE TOOL CALL ID
-    tool_call_id = None
+    # 1. EXTRACT ARGUMENTS
     args = {}
+    tool_call_id = None
     try:
         tool_call_list = data.get('message', {}).get('toolCallList', [])
         if tool_call_list:
@@ -165,31 +159,22 @@ def handle_tool_call(data):
                 args = tool_calls[0].get('function', {}).get('arguments', {})
             else:
                 args = data
-    except Exception as e:
-        print(f"❌ Error parsing tool call: {e}")
+    except:
         args = data
         
-    print(f"🔑 TOOL CALL ID: {tool_call_id}")
-    print(f"📋 ARGUMENTS: {args}")
-
-    # 2. GET PHONE NUMBER FROM CALL DATA
+    # 2. GET PHONE NUMBER
     phone = None
     try:
-        call_data = data.get('message', {}).get('call', {})
-        customer = call_data.get('customer', {})
-        phone = customer.get('number')
-        
-        if not phone:
-            phone = data.get('message', {}).get('customer', {}).get('number')
-    except Exception as e:
-        print(f"⚠️ Could not get phone from call data: {e}")
+        system_phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+        if not system_phone:
+             system_phone = data.get('message', {}).get('customer', {}).get('number')
+        phone = system_phone
+    except: pass
     
     if not phone:
         phone = args.get('phone')
     
-    print(f"📱 DETECTED PHONE: {phone}")
-
-    # 3. CLEAN UP PHONE NUMBER
+    # 3. CLEAN PHONE NUMBER
     if phone:
         phone = str(phone).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
         if len(phone) == 10:
@@ -199,33 +184,29 @@ def handle_tool_call(data):
         elif not phone.startswith("+"):
             phone = f"+{phone}"
 
-    # 4. BUILD THE MESSAGE
+    # 4. BUILD THE MESSAGE (NO URLS HERE)
     req_type = args.get('type', 'default').lower()
     
+    # 🟢 ULTRA SAFE MODE: NO .COM OR HTTP
     message_map = {
-        "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
-        "packages": "View our full event packages at natashamaes.com/packages.",
-        "registration": "Complete your event registration here: natashamaes.com/register",
-        "invoice": "You can view and pay your invoice securely at natashamaes.com/payment",
+        "tour": "We would love to show you around! Please search for Natasha Mae's Enterprises on Google to schedule your VIP tour online.",
+        "packages": "Our full event packages are available on our main website. Search for Natasha Mae's Enterprises to view them.",
+        "registration": "To complete your event registration, please check your email for the forms or visit our main office.",
+        "invoice": "You can view and pay your invoice securely by contacting our billing department or via our main website.",
         "vault_map": "The Vault is located at 322 High St, Burlington NJ. See you soon!",
         "liberty_map": "Liberty Palace is at 1 Franklin Mills Blvd, Philadelphia. See you soon!",
         "frankford_map": "Our Frankford location is at 4446 Frankford Ave, Philadelphia.",
-        "default": "Thank you for calling Natasha Mae's! Visit natashamaes.com for info."
+        "default": "Thank you for calling Natasha Mae's! We look forward to hosting your event."
     }
     
     message_body = message_map.get(req_type, message_map["default"])
 
     # 5. SEND THE TEXT
     print(f"🕵️ Attempting Textbelt to: {phone}")
-    
     result_message = ""
     
-    if not phone:
-        result_message = "Error: Could not detect phone number"
-        print(f"❌ {result_message}")
-    elif not TEXTBELT_KEY:
-        result_message = "Error: Missing TEXTBELT_KEY"
-        print(f"❌ {result_message}")
+    if not phone or not TEXTBELT_KEY:
+        result_message = "Error: Missing phone or key"
     else:
         try:
             resp = requests.post('https://textbelt.com/text', {
@@ -234,20 +215,14 @@ def handle_tool_call(data):
                 'key': TEXTBELT_KEY, 
             })
             print(f"📬 Textbelt Response: {resp.text}")
-            
-            resp_json = resp.json()
-            if resp_json.get('success'):
-                result_message = f"SMS sent successfully to {phone}"
-                print(f"✅ {result_message}")
+            if resp.json().get('success'):
+                result_message = "SMS sent successfully"
             else:
-                result_message = f"SMS failed: {resp_json.get('error', 'Unknown error')}"
-                print(f"❌ {result_message}")
-
+                result_message = f"SMS failed: {resp.json().get('error')}"
         except Exception as e:
-            result_message = f"SMS failed with exception: {str(e)}"
-            print(f"❌ {result_message}")
+            result_message = f"SMS failed: {str(e)}"
 
-    # 6. RETURN IN VAPI'S REQUIRED FORMAT
+    # 6. RETURN TO VAPI
     response = {
         "results": [
             {
@@ -256,17 +231,12 @@ def handle_tool_call(data):
             }
         ]
     }
-    
-    print(f"📤 RETURNING TO VAPI: {response}")
     return jsonify(response), 200
-
 
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
     """Direct endpoint for tool calls"""
-    print(f"📩 DIRECT HIT TO /send-sms!")
     return handle_tool_call(request.json)
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
