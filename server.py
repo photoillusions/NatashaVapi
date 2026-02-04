@@ -13,37 +13,39 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN (UPDATED: STRICTER RULES) ---
+# --- THE BRAIN (VERSION 2.1: STRICT RULES + AUDIO) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
-**Tone:** Elegant, warm, polished, and patient.
+**Tone:** Elegant, warm, polished, and patient. You are the "First Impression" of a luxury experience.
 
 **CONTEXT - 3 LOCATIONS:**
-1. **Frankford Ave** (Philly): Intimate, <100 guests.
-2. **Liberty Palace** (Franklin Mills): Grand ballroom, 150-250 guests.
-3. **The Vault** (Burlington, NJ): Historic, luxury, original bank vaults.
+1. **Natasha Mae's Banquet Facility:** 4446 Frankford Ave, Philadelphia. (Intimate, classic, <100 guests).
+2. **Mae's Liberty Palace:** 1 Franklin Mills Blvd, Philadelphia. (Grand ballroom, 150-250 guests).
+3. **The Vault Ballroom:** 322 High Street, Burlington, NJ. (Historic, original bank vaults, unique luxury).
 
-**⛔️ CRITICAL RULE: DO NOT LIE ABOUT TEXTING**
-If the user asks for a brochure, tour link, map, invoice, or registration:
-1. You **MUST** use the `send_sms_link` tool.
-2. Do **NOT** say "I sent it" unless you have actually triggered the tool.
-3. If they ask "Can you text me?", simply say: "Sending that to your mobile now" and TRIGGER THE TOOL immediately.
+**⛔️ CRITICAL RULES (DO NOT IGNORE):**
+1. **NO LYING ABOUT TEXTS:** If the user asks for a brochure, link, map, or invoice, you **MUST** use the `send_sms_link` tool. Do not say "I sent it" unless you actually triggered the tool.
+2. **DO NOT HANG UP:** After sending a text, **IMMEDIATELY ask**: "I've sent that to your mobile. Is there anything else I can check for you?"
+3. **Keep it Open:** Do not end the call unless the user explicitly says "Goodbye" or "That is all."
+4. **Identify the Venue:** Early in the call, ask if they are looking for the **Frankford**, **Franklin Mills**, or **Burlington (The Vault)** location.
+5. **Guest Count:** Always ask for guest count to ensure they fit the room.
 
-**Types of info you can text:**
+**Types of info you can text (Tool Parameters):**
 - 'tour' (Scheduling Calendar)
 - 'packages' (Brochures)
-- 'vault_map' (GPS)
+- 'registration' (Forms)
 - 'invoice' (Payment)
+- 'vault_map' (GPS)
 """
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online"
+    return "Natasha Mae's Server Online (Audio Enabled)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json
-    print(f"📞 HIT /inbound")
+    print(f"📞 HIT /inbound: Checking message type...")
 
     # --- 1. HANDLE END OF CALL REPORT (SEND EMAIL) ---
     message_type = data.get('message', {}).get('type')
@@ -55,13 +57,16 @@ def inbound_call():
             summary = call.get('summary', 'No summary provided.')
             transcript = call.get('transcript', 'No transcript provided.')
             
+            # 🟢 NEW: Grab the Audio Recording URL
+            recording_url = call.get('recordingUrl', 'No recording available.')
+            
             msg = MIMEMultipart()
-            # 🟢 MASKED NAME FIX
             msg['From'] = f"Natasha Booking Concierge <{EMAIL_SENDER}>"
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
             
-            body = f"Call Summary:\n{summary}\n\n---\n\nTranscript:\n{transcript}"
+            # 🟢 NEW: Added Audio Link to Body
+            body = f"Call Summary:\n{summary}\n\n🎧 Audio Recording:\n{recording_url}\n\n---\n\nTranscript:\n{transcript}"
             msg.attach(MIMEText(body, 'plain'))
             
             if not EMAIL_SENDER or not EMAIL_PASSWORD:
@@ -80,24 +85,24 @@ def inbound_call():
         return jsonify({"status": "Report Received"}), 200
 
     # --- 2. HANDLE INCOMING CALL (START AI) ---
-    print("🤖 STARTING AI LOGIC...")
+    print("🤖 STARTING AI LOGIC (GPT-4o)...")
     response = {
         "assistant": {
             "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
             "model": {
                 "provider": "openai",
-                "model": "gpt-4o-mini",
+                "model": "gpt-4o",  # Standard GPT-4o for smart tool usage
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "tools": [
                     {
                         "type": "function",
                         "function": {
                             "name": "send_sms_link",
-                            "description": "Sends a text message to the caller.",
+                            "description": "Sends a text message with a link/brochure/invoice.",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
-                                    "phone": {"type": "string", "description": "The user's phone number."},
+                                    "phone": {"type": "string", "description": "Customer phone number"},
                                     "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
                                 },
                                 "required": ["phone", "type"]
@@ -123,9 +128,7 @@ def inbound_call():
 
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
-    # 🟢 DEBUG PRINT: If you don't see this, Vapi didn't call the tool
     print(f"📩 SMS TOOL ACCESSED!") 
-    
     data = request.json
 
     # 1. SMART NUMBER DETECTION
@@ -178,7 +181,11 @@ def send_sms_tool():
             'key': TEXTBELT_KEY, 
         })
         print(f"Textbelt Result: {resp.text}")
-        return jsonify({"result": "SMS Sent"}), 200
+        
+        if resp.json().get('success'):
+            return jsonify({"result": "SMS Sent Successfully"}), 200
+        else:
+            return jsonify({"result": f"Failed: {resp.json().get('error')}"}), 200
 
     except Exception as e:
         print(f"Error: {e}")
