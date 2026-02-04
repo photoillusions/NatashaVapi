@@ -41,7 +41,7 @@ If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHIN
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (V3.1 - Mini Fixed)"
+    return "Natasha Mae's Server Online (V3.2 - VAPI Fixed)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -88,7 +88,7 @@ def inbound_call():
             "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
             "model": {
                 "provider": "openai",
-                "model": "gpt-4o-mini",  # 🟢 Staying Cheap
+                "model": "gpt-4o-mini",
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "tools": [
                     {
@@ -99,11 +99,9 @@ def inbound_call():
                             "parameters": {
                                 "type": "object",
                                 "properties": {
-                                    # 🟢 NOTE: We describe this, but we don't MAKE it required anymore.
                                     "phone": {"type": "string", "description": "Optional: Customer phone number (System will detect automatically)"},
                                     "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
                                 },
-                                # 🟢 CRITICAL FIX: Only 'type' is required now.
                                 "required": ["type"] 
                             }
                         },
@@ -125,39 +123,77 @@ def inbound_call():
     }
     return jsonify(response), 200
 
+
+# =====================================================
+# FIXED SMS ENDPOINT - CORRECT VAPI RESPONSE FORMAT
+# =====================================================
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
     print(f"📩 SMS TOOL ACCESSED!") 
     data = request.json
+    print(f"📦 RAW DATA: {data}")
 
-    # 1. SMART NUMBER DETECTION (This does the heavy lifting so AI doesn't have to)
-    system_phone = None
-    try:
-        system_phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
-        if not system_phone:
-             system_phone = data.get('message', {}).get('customer', {}).get('number')
-    except: pass
-    
+    # ============================================
+    # 1. EXTRACT THE TOOL CALL ID (CRITICAL!)
+    # ============================================
+    tool_call_id = None
     args = {}
     try:
-        if 'message' in data and 'toolCalls' in data['message']:
-            args = data['message']['toolCalls'][0]['function']['arguments']
+        # VAPI sends toolCallList with the ID
+        tool_call_list = data.get('message', {}).get('toolCallList', [])
+        if tool_call_list:
+            tool_call_id = tool_call_list[0].get('id')
+            args = tool_call_list[0].get('arguments', {})
         else:
-            args = data
-    except: args = data
+            # Fallback to older format
+            tool_calls = data.get('message', {}).get('toolCalls', [])
+            if tool_calls:
+                tool_call_id = tool_calls[0].get('id')
+                args = tool_calls[0].get('function', {}).get('arguments', {})
+            else:
+                args = data
+    except Exception as e:
+        print(f"❌ Error parsing tool call: {e}")
+        args = data
+        
+    print(f"🔑 TOOL CALL ID: {tool_call_id}")
+    print(f"📋 ARGUMENTS: {args}")
 
-    # Use the system number if the AI didn't provide one
-    phone = system_phone if system_phone else args.get('phone')
+    # ============================================
+    # 2. GET PHONE NUMBER FROM CALL DATA
+    # ============================================
+    phone = None
+    try:
+        call_data = data.get('message', {}).get('call', {})
+        customer = call_data.get('customer', {})
+        phone = customer.get('number')
+        
+        if not phone:
+            phone = data.get('message', {}).get('customer', {}).get('number')
+    except Exception as e:
+        print(f"⚠️ Could not get phone from call data: {e}")
     
-    # 2. FIX US PHONE NUMBERS
+    if not phone:
+        phone = args.get('phone')
+    
+    print(f"📱 DETECTED PHONE: {phone}")
+
+    # ============================================
+    # 3. CLEAN UP PHONE NUMBER
+    # ============================================
     if phone:
-        phone = str(phone).replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        phone = str(phone).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
         if len(phone) == 10:
             phone = f"+1{phone}"
         elif len(phone) == 11 and phone.startswith("1"):
             phone = f"+{phone}"
+        elif not phone.startswith("+"):
+            phone = f"+{phone}"
 
-    req_type = args.get('type', 'brochure').lower()
+    # ============================================
+    # 4. BUILD THE MESSAGE
+    # ============================================
+    req_type = args.get('type', 'default').lower()
     
     message_map = {
         "tour": "Please visit natashamaes.com/contact to schedule your VIP tour.",
@@ -172,27 +208,55 @@ def send_sms_tool():
     
     message_body = message_map.get(req_type, message_map["default"])
 
+    # ============================================
+    # 5. SEND THE TEXT
+    # ============================================
     print(f"🕵️ Attempting Textbelt to: {phone}")
+    
+    result_message = ""
+    
+    if not phone:
+        result_message = "Error: Could not detect phone number"
+        print(f"❌ {result_message}")
+    elif not TEXTBELT_KEY:
+        result_message = "Error: Missing TEXTBELT_KEY"
+        print(f"❌ {result_message}")
+    else:
+        try:
+            resp = requests.post('https://textbelt.com/text', {
+                'phone': phone,
+                'message': message_body, 
+                'key': TEXTBELT_KEY, 
+            })
+            print(f"📬 Textbelt Response: {resp.text}")
+            
+            resp_json = resp.json()
+            if resp_json.get('success'):
+                result_message = f"SMS sent successfully to {phone}"
+                print(f"✅ {result_message}")
+            else:
+                result_message = f"SMS failed: {resp_json.get('error', 'Unknown error')}"
+                print(f"❌ {result_message}")
 
-    try:
-        if not TEXTBELT_KEY:
-             return jsonify({"result": "Error: Missing TEXTBELT_KEY"}), 200
+        except Exception as e:
+            result_message = f"SMS failed with exception: {str(e)}"
+            print(f"❌ {result_message}")
 
-        resp = requests.post('https://textbelt.com/text', {
-            'phone': phone,
-            'message': message_body, 
-            'key': TEXTBELT_KEY, 
-        })
-        print(f"Textbelt Result: {resp.text}")
-        
-        if resp.json().get('success'):
-            return jsonify({"result": "SMS Sent Successfully"}), 200
-        else:
-            return jsonify({"result": f"Failed: {resp.json().get('error')}"}), 200
+    # ============================================
+    # 6. RETURN IN VAPI'S REQUIRED FORMAT!!!
+    # ============================================
+    response = {
+        "results": [
+            {
+                "toolCallId": tool_call_id,
+                "result": result_message
+            }
+        ]
+    }
+    
+    print(f"📤 RETURNING TO VAPI: {response}")
+    return jsonify(response), 200
 
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"result": "Failed"}), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
