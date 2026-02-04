@@ -1,5 +1,6 @@
 import os
 import smtplib
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify
@@ -11,6 +12,10 @@ app = Flask(__name__)
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER")     # Your Gmail Address
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD") # Your Gmail App Password
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") # Where call reports go
+
+# 📱 CLICKSEND SMS API CREDENTIALS
+CLICKSEND_USERNAME = os.environ.get("CLICKSEND_USERNAME")  # Your ClickSend username (email)
+CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY")    # Your ClickSend API Key
 
 # --- THE BRAIN ---
 SYSTEM_PROMPT = """
@@ -117,10 +122,10 @@ def inbound_call():
     return jsonify({"status": "acknowledged"}), 200
 
 # =====================================================
-# 🔫 THE SHOTGUN EMAIL GATEWAY HANDLER
+# � CLICKSEND SMS API HANDLER
 # =====================================================
 def handle_tool_call(data):
-    print("🔫 TRIGGERING SHOTGUN EMAIL-TEXT...")
+    print("� TRIGGERING CLICKSEND SMS...")
     
     # 1. EXTRACT ARGS
     args = {}
@@ -150,77 +155,80 @@ def handle_tool_call(data):
 
     if not phone_raw: phone_raw = args.get('phone')
 
-    # Clean to 10 digits
+    # Clean phone number and format for ClickSend (needs +1 for US)
     phone = str(phone_raw).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
-    if len(phone) == 11 and phone.startswith("1"):
-        phone = phone[1:] # Strip leading 1
+    if len(phone) == 10:
+        phone = "1" + phone  # Add US country code
+    if not phone.startswith("+"):
+        phone = "+" + phone  # ClickSend requires + prefix
 
-    # 3. DEFINE THE LINKS (REAL HTTPS LINKS!)
+    # 3. DEFINE THE LINKS
     req_type = args.get('type', 'default').lower()
     
-    # Since email gateways don't block links, we use the real ones:
     message_map = {
-        "tour": "Schedule your VIP tour here: https://www.natashamaes.com/contact-us",
-        "packages": "View our full packages: https://www.natashamaes.com/packages",
-        "registration": "Register here: https://www.natashamaes.com/register",
-        "invoice": "View your invoice: https://www.natashamaes.com/payment",
+        "tour": "Natasha Mae's: Schedule your VIP tour here: https://www.natashamaes.com/contact-us",
+        "packages": "Natasha Mae's: View our full packages: https://www.natashamaes.com/packages",
+        "registration": "Natasha Mae's: Register here: https://www.natashamaes.com/register",
+        "invoice": "Natasha Mae's: View your invoice: https://www.natashamaes.com/payment",
         "vault_map": "The Vault GPS: https://goo.gl/maps/placeholder",
         "liberty_map": "Liberty Palace GPS: https://goo.gl/maps/placeholder",
         "frankford_map": "Frankford Ave GPS: https://goo.gl/maps/placeholder",
-        "default": "Visit us at https://www.natashamaes.com"
+        "default": "Natasha Mae's: Visit us at https://www.natashamaes.com"
     }
     
     message_body = message_map.get(req_type, message_map["default"])
 
-    # 4. DEFINE GATEWAYS (The "Shotgun")
-    # This list covers Verizon, T-Mobile, AT&T, Sprint, Metro, Cricket, Virgin, etc.
-    gateways = [
-        f"{phone}@vtext.com",       # Verizon
-        f"{phone}@tmomail.net",     # T-Mobile
-        f"{phone}@txt.att.net",     # AT&T
-        f"{phone}@mms.att.net",     # AT&T MMS (Better for links)
-        f"{phone}@messaging.sprintpcs.com", # Sprint
-        f"{phone}@mymetropcs.com",  # MetroPCS
-        f"{phone}@sms.cricketwireless.net", # Cricket
-        f"{phone}@vmobl.com"        # Virgin Mobile
-    ]
-
     result_message = ""
 
-    # 5. FIRE THE EMAILS
-    if not EMAIL_SENDER or not EMAIL_PASSWORD:
-        result_message = "Error: Missing Email Credentials on Server"
-        print("❌ MISSING CREDENTIALS")
-    elif not phone:
-        result_message = "Error: No Phone Number Found"
+    # 4. SEND VIA CLICKSEND API
+    if not CLICKSEND_USERNAME or not CLICKSEND_API_KEY:
+        result_message = "Error: Missing ClickSend Credentials on Server"
+        print("❌ MISSING CLICKSEND CREDENTIALS")
+    elif not phone or len(phone) < 10:
+        result_message = "Error: No Valid Phone Number Found"
+        print(f"❌ INVALID PHONE: {phone}")
     else:
         try:
-            print(f"🔥 Firing at {len(gateways)} gateways for {phone}...")
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-
-            success_count = 0
-            for gateway in gateways:
-                try:
-                    msg = MIMEMultipart()
-                    msg['From'] = "Natasha"
-                    msg['To'] = gateway
-                    msg['Subject'] = "Link" # Required by some carriers
-                    msg.attach(MIMEText(message_body, 'plain'))
-                    server.send_message(msg)
-                    success_count += 1
-                except: pass # Ignore failures (most will fail, one will hit)
+            print(f"📲 Sending SMS to {phone} via ClickSend...")
             
-            server.quit()
-            result_message = f"Blast sent to {success_count} gateways."
-            print(f"✅ {result_message}")
+            # ClickSend REST API endpoint
+            url = "https://rest.clicksend.com/v3/sms/send"
+            
+            payload = {
+                "messages": [
+                    {
+                        "to": phone,
+                        "body": message_body,
+                        "source": "NatashaMaes"
+                    }
+                ]
+            }
+            
+            response = requests.post(
+                url,
+                json=payload,
+                auth=(CLICKSEND_USERNAME, CLICKSEND_API_KEY),
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                # Check if message was accepted
+                if response_data.get("response_code") == "SUCCESS":
+                    result_message = f"SMS sent successfully to {phone}"
+                    print(f"✅ {result_message}")
+                else:
+                    result_message = f"ClickSend Error: {response_data.get('response_msg', 'Unknown error')}"
+                    print(f"⚠️ {result_message}")
+            else:
+                result_message = f"ClickSend HTTP Error: {response.status_code}"
+                print(f"❌ {result_message} - {response.text}")
 
         except Exception as e:
-            result_message = f"SMTP Error: {e}"
+            result_message = f"SMS Error: {e}"
             print(f"❌ {result_message}")
 
-    # 6. RETURN TO VAPI
+    # 5. RETURN TO VAPI
     return jsonify({
         "results": [{
             "toolCallId": tool_call_id,
@@ -230,7 +238,7 @@ def handle_tool_call(data):
 
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
-    """Direct endpoint"""
+    """Direct endpoint for SMS tool calls"""
     return handle_tool_call(request.json)
 
 if __name__ == '__main__':
