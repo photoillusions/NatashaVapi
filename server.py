@@ -13,7 +13,7 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN (VERSION 3.0: TOTAL OBEDIENCE) ---
+# --- THE BRAIN (VERSION 3.1: OBEDIENCE + OPTIONAL PHONE) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 **Tone:** Efficient, Polite, and IMMEDIATE.
@@ -27,18 +27,9 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHING** and trigger the `send_sms_link` tool immediately.
 
 **RULES OF ENGAGEMENT:**
-1. **DO NOT** ask for their name first.
-2. **DO NOT** ask for the guest count first.
-3. **DO NOT** finish your current sentence or sales pitch.
-4. **JUST SEND IT.**
-
-**Example of Correct Behavior:**
-User: "Can you just text me the pricing?"
-You: (Triggers Tool) "I've sent that to your mobile just now. Is there anything else?"
-
-**Example of INCORRECT Behavior (DO NOT DO THIS):**
-User: "Can you text me the pricing?"
-You: "Sure, but first, how many guests do you have?" <--- **NEVER DO THIS.**
+1. **YOU ALREADY HAVE THE PHONE NUMBER:** Do not ask for it. Do not worry about it. Just trigger the tool.
+2. **DO NOT** ask qualifying questions if they just want a text.
+3. **JUST SEND IT.**
 
 **Tool Parameters (Type):**
 - 'tour' (Scheduling Calendar)
@@ -50,7 +41,7 @@ You: "Sure, but first, how many guests do you have?" <--- **NEVER DO THIS.**
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (Obedience Mode)"
+    return "Natasha Mae's Server Online (V3.1 - Mini Fixed)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -97,7 +88,7 @@ def inbound_call():
             "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
             "model": {
                 "provider": "openai",
-                "model": "gpt-4o-mini",  # 🟢 Back to the cheaper model, but with STRICTER rules
+                "model": "gpt-4o-mini",  # 🟢 Staying Cheap
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "tools": [
                     {
@@ -108,10 +99,12 @@ def inbound_call():
                             "parameters": {
                                 "type": "object",
                                 "properties": {
-                                    "phone": {"type": "string", "description": "Customer phone number"},
+                                    # 🟢 NOTE: We describe this, but we don't MAKE it required anymore.
+                                    "phone": {"type": "string", "description": "Optional: Customer phone number (System will detect automatically)"},
                                     "type": {"type": "string", "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]}
                                 },
-                                "required": ["phone", "type"]
+                                # 🟢 CRITICAL FIX: Only 'type' is required now.
+                                "required": ["type"] 
                             }
                         },
                         "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
@@ -137,7 +130,7 @@ def send_sms_tool():
     print(f"📩 SMS TOOL ACCESSED!") 
     data = request.json
 
-    # 1. SMART NUMBER DETECTION
+    # 1. SMART NUMBER DETECTION (This does the heavy lifting so AI doesn't have to)
     system_phone = None
     try:
         system_phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
@@ -153,6 +146,7 @@ def send_sms_tool():
             args = data
     except: args = data
 
+    # Use the system number if the AI didn't provide one
     phone = system_phone if system_phone else args.get('phone')
     
     # 2. FIX US PHONE NUMBERS
