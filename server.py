@@ -13,24 +13,34 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
-# --- THE BRAIN (VERSION 2.1: STRICT RULES + AUDIO) ---
+# --- THE BRAIN (VERSION 3.0: TOTAL OBEDIENCE) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
-**Tone:** Elegant, warm, polished, and patient. You are the "First Impression" of a luxury experience.
+**Tone:** Efficient, Polite, and IMMEDIATE.
 
 **CONTEXT - 3 LOCATIONS:**
-1. **Natasha Mae's Banquet Facility:** 4446 Frankford Ave, Philadelphia. (Intimate, classic, <100 guests).
-2. **Mae's Liberty Palace:** 1 Franklin Mills Blvd, Philadelphia. (Grand ballroom, 150-250 guests).
-3. **The Vault Ballroom:** 322 High Street, Burlington, NJ. (Historic, original bank vaults, unique luxury).
+1. **Frankford Ave** (Philly): Intimate, <100 guests.
+2. **Liberty Palace** (Franklin Mills): Grand ballroom, 150-250 guests.
+3. **The Vault** (Burlington, NJ): Historic, luxury, original bank vaults.
 
-**⛔️ CRITICAL RULES (DO NOT IGNORE):**
-1. **NO LYING ABOUT TEXTS:** If the user asks for a brochure, link, map, or invoice, you **MUST** use the `send_sms_link` tool. Do not say "I sent it" unless you actually triggered the tool.
-2. **DO NOT HANG UP:** After sending a text, **IMMEDIATELY ask**: "I've sent that to your mobile. Is there anything else I can check for you?"
-3. **Keep it Open:** Do not end the call unless the user explicitly says "Goodbye" or "That is all."
-4. **Identify the Venue:** Early in the call, ask if they are looking for the **Frankford**, **Franklin Mills**, or **Burlington (The Vault)** location.
-5. **Guest Count:** Always ask for guest count to ensure they fit the room.
+**🔥 PRIME DIRECTIVE: IMMEDIATE ACTION 🔥**
+If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHING** and trigger the `send_sms_link` tool immediately.
 
-**Types of info you can text (Tool Parameters):**
+**RULES OF ENGAGEMENT:**
+1. **DO NOT** ask for their name first.
+2. **DO NOT** ask for the guest count first.
+3. **DO NOT** finish your current sentence or sales pitch.
+4. **JUST SEND IT.**
+
+**Example of Correct Behavior:**
+User: "Can you just text me the pricing?"
+You: (Triggers Tool) "I've sent that to your mobile just now. Is there anything else?"
+
+**Example of INCORRECT Behavior (DO NOT DO THIS):**
+User: "Can you text me the pricing?"
+You: "Sure, but first, how many guests do you have?" <--- **NEVER DO THIS.**
+
+**Tool Parameters (Type):**
 - 'tour' (Scheduling Calendar)
 - 'packages' (Brochures)
 - 'registration' (Forms)
@@ -40,12 +50,12 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (Audio Enabled)"
+    return "Natasha Mae's Server Online (Obedience Mode)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json
-    print(f"📞 HIT /inbound: Checking message type...")
+    print(f"📞 HIT /inbound")
 
     # --- 1. HANDLE END OF CALL REPORT (SEND EMAIL) ---
     message_type = data.get('message', {}).get('type')
@@ -56,8 +66,6 @@ def inbound_call():
             call = data.get('message', data)
             summary = call.get('summary', 'No summary provided.')
             transcript = call.get('transcript', 'No transcript provided.')
-            
-            # 🟢 NEW: Grab the Audio Recording URL
             recording_url = call.get('recordingUrl', 'No recording available.')
             
             msg = MIMEMultipart()
@@ -65,12 +73,10 @@ def inbound_call():
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
             
-            # 🟢 NEW: Added Audio Link to Body
             body = f"Call Summary:\n{summary}\n\n🎧 Audio Recording:\n{recording_url}\n\n---\n\nTranscript:\n{transcript}"
             msg.attach(MIMEText(body, 'plain'))
             
             if not EMAIL_SENDER or not EMAIL_PASSWORD:
-                print("❌ FAIL: Missing Credentials.")
                 return jsonify({"status": "Missing Credentials"}), 200
 
             server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -85,13 +91,13 @@ def inbound_call():
         return jsonify({"status": "Report Received"}), 200
 
     # --- 2. HANDLE INCOMING CALL (START AI) ---
-    print("🤖 STARTING AI LOGIC (GPT-4o)...")
+    print("🤖 STARTING AI LOGIC (GPT-4o-mini)...")
     response = {
         "assistant": {
             "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
             "model": {
                 "provider": "openai",
-                "model": "gpt-4o",  # Standard GPT-4o for smart tool usage
+                "model": "gpt-4o-mini",  # 🟢 Back to the cheaper model, but with STRICTER rules
                 "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
                 "tools": [
                     {
@@ -175,6 +181,9 @@ def send_sms_tool():
     print(f"🕵️ Attempting Textbelt to: {phone}")
 
     try:
+        if not TEXTBELT_KEY:
+             return jsonify({"result": "Error: Missing TEXTBELT_KEY"}), 200
+
         resp = requests.post('https://textbelt.com/text', {
             'phone': phone,
             'message': message_body, 
