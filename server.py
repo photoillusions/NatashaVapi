@@ -1,5 +1,4 @@
 import os
-import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -8,10 +7,10 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
-EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
-TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
+# 🔴 CRITICAL: These MUST be set in Render Environment Variables
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER")     # Your Gmail Address
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD") # Your Gmail App Password
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") # Where call reports go
 
 # --- THE BRAIN ---
 SYSTEM_PROMPT = """
@@ -32,41 +31,37 @@ If the caller asks for a text, brochure, map, or link, you must **STOP EVERYTHIN
 3. **JUST SEND IT.**
 
 **Tool Parameters (Type):**
-- 'tour' (Scheduling Info)
-- 'packages' (Brochure Info)
+- 'tour' (Scheduling Calendar)
+- 'packages' (Brochures)
 - 'registration' (Forms)
-- 'invoice' (Payment Info)
-- 'vault_map' (GPS Address)
-- 'liberty_map' (GPS Address)
-- 'frankford_map' (GPS Address)
+- 'invoice' (Payment)
+- 'vault_map' (GPS)
+- 'liberty_map' (GPS)
+- 'frankford_map' (GPS)
 """
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (Ultra-Safe Mode)"
+    return "Natasha Mae's Server Online (Email Gateway Edition)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json
     message_type = data.get('message', {}).get('type')
-    
     print(f"📞 HIT /inbound - TYPE: {message_type}")
 
-    # 1. END OF CALL REPORT - Send email
+    # 1. REPORTING (Emails you the summary)
     if message_type == 'end-of-call-report':
-        print("📝 REPORT RECEIVED. Attempting Email...")
         try:
             call = data.get('message', data)
-            summary = call.get('summary', 'No summary provided.')
-            transcript = call.get('transcript', 'No transcript provided.')
-            recording_url = call.get('recordingUrl', 'No recording available.')
+            summary = call.get('summary', 'No summary.')
+            transcript = call.get('transcript', 'No transcript.')
             
             msg = MIMEMultipart()
-            msg['From'] = f"Natasha Booking Concierge <{EMAIL_SENDER}>"
+            msg['From'] = f"Natasha AI <{EMAIL_SENDER}>"
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
-            
-            body = f"Call Summary:\n{summary}\n\n🎧 Audio Recording:\n{recording_url}\n\n---\n\nTranscript:\n{transcript}"
+            body = f"Call Summary:\n{summary}\n\n---\n\nTranscript:\n{transcript}"
             msg.attach(MIMEText(body, 'plain'))
             
             if EMAIL_SENDER and EMAIL_PASSWORD:
@@ -75,17 +70,12 @@ def inbound_call():
                 server.login(EMAIL_SENDER, EMAIL_PASSWORD)
                 server.send_message(msg)
                 server.quit()
-                print("✅ EMAIL SENT SUCCESSFULLY!")
-            else:
-                print("⚠️ Missing email credentials")
         except Exception as e:
-            print(f"❌ EMAIL FAILED: {e}")
-        
-        return jsonify({"status": "Report Received"}), 200
+            print(f"❌ Report Email Failed: {e}")
+        return jsonify({"status": "OK"}), 200
 
-    # 2. ASSISTANT REQUEST - Return the assistant config
+    # 2. VAPI CONFIGURATION
     if message_type == 'assistant-request':
-        print("🤖 ASSISTANT REQUEST - Sending config...")
         response = {
             "assistant": {
                 "firstMessage": "Thank you for calling Natasha Mae's Enterprises. This is Jessica. Are you inquiring about our Philadelphia locations or The Vault in New Jersey?",
@@ -98,53 +88,41 @@ def inbound_call():
                             "type": "function",
                             "function": {
                                 "name": "send_sms_link",
-                                "description": "Sends a text message with info/address to the caller.",
+                                "description": "Sends a text message with a clickable link.",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
                                         "type": {
-                                            "type": "string", 
-                                            "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"],
-                                            "description": "The type of information to send"
+                                            "type": "string",
+                                            "enum": ["tour", "packages", "registration", "invoice", "vault_map", "liberty_map", "frankford_map"]
                                         }
                                     },
-                                    "required": ["type"] 
+                                    "required": ["type"]
                                 }
                             },
+                            # 🔴 UPDATE THIS URL TO YOUR RENDER URL
                             "server": {"url": "https://natashavapi.onrender.com/send-sms"} 
                         }
                     ]
                 },
-                "transcriber": {
-                    "provider": "deepgram",
-                    "model": "nova-2",
-                    "language": "en-US",
-                    "endpointing": 1500
-                },
-                "voice": {
-                    "provider": "11labs",
-                    "voiceId": "21m00Tcm4TlvDq8ikWAM" 
-                }
+                "transcriber": {"provider": "deepgram", "model": "nova-2", "language": "en-US"},
+                "voice": {"provider": "11labs", "voiceId": "21m00Tcm4TlvDq8ikWAM"}
             }
         }
         return jsonify(response), 200
 
-    # 3. TOOL CALLS - Route to send-sms handler
     if message_type == 'tool-calls':
-        print("🔧 TOOL CALL received at /inbound - routing to handler...")
         return handle_tool_call(data)
 
     return jsonify({"status": "acknowledged"}), 200
 
-
 # =====================================================
-# SMS TOOL HANDLER
+# 🔫 THE SHOTGUN EMAIL GATEWAY HANDLER
 # =====================================================
 def handle_tool_call(data):
-    """Handle the actual SMS sending logic"""
-    print(f"📩 SMS TOOL PROCESSING!") 
-
-    # 1. EXTRACT ARGUMENTS
+    print("🔫 TRIGGERING SHOTGUN EMAIL-TEXT...")
+    
+    # 1. EXTRACT ARGS
     args = {}
     tool_call_id = None
     try:
@@ -153,89 +131,106 @@ def handle_tool_call(data):
             tool_call_id = tool_call_list[0].get('id')
             args = tool_call_list[0].get('arguments', {})
         else:
+            # Fallback for direct tool calls
             tool_calls = data.get('message', {}).get('toolCalls', [])
             if tool_calls:
                 tool_call_id = tool_calls[0].get('id')
                 args = tool_calls[0].get('function', {}).get('arguments', {})
             else:
                 args = data
-    except:
-        args = data
-        
-    # 2. GET PHONE NUMBER
-    phone = None
-    try:
-        system_phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
-        if not system_phone:
-             system_phone = data.get('message', {}).get('customer', {}).get('number')
-        phone = system_phone
-    except: pass
-    
-    if not phone:
-        phone = args.get('phone')
-    
-    # 3. CLEAN PHONE NUMBER
-    if phone:
-        phone = str(phone).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
-        if len(phone) == 10:
-            phone = f"+1{phone}"
-        elif len(phone) == 11 and phone.startswith("1"):
-            phone = f"+{phone}"
-        elif not phone.startswith("+"):
-            phone = f"+{phone}"
+    except: args = data
 
-    # 4. BUILD THE MESSAGE (NO URLS HERE)
+    # 2. GET & CLEAN PHONE NUMBER
+    phone_raw = None
+    try:
+        phone_raw = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+        if not phone_raw:
+             phone_raw = data.get('message', {}).get('customer', {}).get('number')
+    except: pass
+
+    if not phone_raw: phone_raw = args.get('phone')
+
+    # Clean to 10 digits
+    phone = str(phone_raw).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
+    if len(phone) == 11 and phone.startswith("1"):
+        phone = phone[1:] # Strip leading 1
+
+    # 3. DEFINE THE LINKS (REAL HTTPS LINKS!)
     req_type = args.get('type', 'default').lower()
     
-    # 🟢 ULTRA SAFE MODE: NO .COM OR HTTP
+    # Since email gateways don't block links, we use the real ones:
     message_map = {
-        "tour": "We would love to show you around! Please search for Natasha Mae's Enterprises on Google to schedule your VIP tour online.",
-        "packages": "Our full event packages are available on our main website. Search for Natasha Mae's Enterprises to view them.",
-        "registration": "To complete your event registration, please check your email for the forms or visit our main office.",
-        "invoice": "You can view and pay your invoice securely by contacting our billing department or via our main website.",
-        "vault_map": "The Vault is located at 322 High St, Burlington NJ. See you soon!",
-        "liberty_map": "Liberty Palace is at 1 Franklin Mills Blvd, Philadelphia. See you soon!",
-        "frankford_map": "Our Frankford location is at 4446 Frankford Ave, Philadelphia.",
-        "default": "Thank you for calling Natasha Mae's! We look forward to hosting your event."
+        "tour": "Schedule your VIP tour here: https://www.natashamaes.com/contact-us",
+        "packages": "View our full packages: https://www.natashamaes.com/packages",
+        "registration": "Register here: https://www.natashamaes.com/register",
+        "invoice": "View your invoice: https://www.natashamaes.com/payment",
+        "vault_map": "The Vault GPS: https://goo.gl/maps/placeholder",
+        "liberty_map": "Liberty Palace GPS: https://goo.gl/maps/placeholder",
+        "frankford_map": "Frankford Ave GPS: https://goo.gl/maps/placeholder",
+        "default": "Visit us at https://www.natashamaes.com"
     }
     
     message_body = message_map.get(req_type, message_map["default"])
 
-    # 5. SEND THE TEXT
-    print(f"🕵️ Attempting Textbelt to: {phone}")
+    # 4. DEFINE GATEWAYS (The "Shotgun")
+    # This list covers Verizon, T-Mobile, AT&T, Sprint, Metro, Cricket, Virgin, etc.
+    gateways = [
+        f"{phone}@vtext.com",       # Verizon
+        f"{phone}@tmomail.net",     # T-Mobile
+        f"{phone}@txt.att.net",     # AT&T
+        f"{phone}@mms.att.net",     # AT&T MMS (Better for links)
+        f"{phone}@messaging.sprintpcs.com", # Sprint
+        f"{phone}@mymetropcs.com",  # MetroPCS
+        f"{phone}@sms.cricketwireless.net", # Cricket
+        f"{phone}@vmobl.com"        # Virgin Mobile
+    ]
+
     result_message = ""
-    
-    if not phone or not TEXTBELT_KEY:
-        result_message = "Error: Missing phone or key"
+
+    # 5. FIRE THE EMAILS
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        result_message = "Error: Missing Email Credentials on Server"
+        print("❌ MISSING CREDENTIALS")
+    elif not phone:
+        result_message = "Error: No Phone Number Found"
     else:
         try:
-            resp = requests.post('https://textbelt.com/text', {
-                'phone': phone,
-                'message': message_body, 
-                'key': TEXTBELT_KEY, 
-            })
-            print(f"📬 Textbelt Response: {resp.text}")
-            if resp.json().get('success'):
-                result_message = "SMS sent successfully"
-            else:
-                result_message = f"SMS failed: {resp.json().get('error')}"
+            print(f"🔥 Firing at {len(gateways)} gateways for {phone}...")
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+
+            success_count = 0
+            for gateway in gateways:
+                try:
+                    msg = MIMEMultipart()
+                    msg['From'] = "Natasha"
+                    msg['To'] = gateway
+                    msg['Subject'] = "Link" # Required by some carriers
+                    msg.attach(MIMEText(message_body, 'plain'))
+                    server.send_message(msg)
+                    success_count += 1
+                except: pass # Ignore failures (most will fail, one will hit)
+            
+            server.quit()
+            result_message = f"Blast sent to {success_count} gateways."
+            print(f"✅ {result_message}")
+
         except Exception as e:
-            result_message = f"SMS failed: {str(e)}"
+            result_message = f"SMTP Error: {e}"
+            print(f"❌ {result_message}")
 
     # 6. RETURN TO VAPI
-    response = {
-        "results": [
-            {
-                "toolCallId": tool_call_id,
-                "result": result_message
-            }
-        ]
-    }
-    return jsonify(response), 200
+    return jsonify({
+        "results": [{
+            "toolCallId": tool_call_id,
+            "result": result_message
+        }]
+    }), 200
 
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
-    """Direct endpoint for tool calls"""
+    """Direct endpoint"""
     return handle_tool_call(request.json)
 
 if __name__ == '__main__':
