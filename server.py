@@ -8,12 +8,9 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-# Make sure these are set in Render Environment Variables!
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") 
-
-# 🟢 NATASHA MAE'S PAID KEY
 TEXTBELT_KEY = "197e09116b0676f9d2e961ce721a186a762e51fbZQSTpdUxPRTdr7H3wsT7A6yWf"
 
 # --- THE BRAIN ---
@@ -53,21 +50,21 @@ def inbound_call():
             summary = call.get('summary', 'No summary provided.')
             transcript = call.get('transcript', 'No transcript provided.')
             
-            # Create Email
             msg = MIMEMultipart()
-            msg['From'] = EMAIL_SENDER
+            
+            # 🟢 MASKING THE NAME HERE
+            msg['From'] = f"Natasha Booking Concierge <{EMAIL_SENDER}>"
+            
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
             
             body = f"Call Summary:\n{summary}\n\n---\n\nTranscript:\n{transcript}"
             msg.attach(MIMEText(body, 'plain'))
             
-            # Check Credentials
             if not EMAIL_SENDER or not EMAIL_PASSWORD:
-                print("❌ FAIL: Missing EMAIL_SENDER or EMAIL_PASSWORD in Render.")
+                print("❌ FAIL: Missing Credentials.")
                 return jsonify({"status": "Missing Credentials"}), 200
 
-            # Send
             server = smtplib.SMTP('smtp.gmail.com', 587)
             server.starttls()
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
