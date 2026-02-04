@@ -62,6 +62,7 @@ def inbound_call():
             call = data.get('message', data)
             summary = call.get('summary', 'No summary.')
             transcript = call.get('transcript', 'No transcript.')
+            print(f"📝 TRANSCRIPT:\n{transcript}")
             
             msg = MIMEMultipart()
             msg['From'] = f"Natasha AI <{EMAIL_SENDER}>"
