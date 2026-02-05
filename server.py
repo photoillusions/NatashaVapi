@@ -54,6 +54,12 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 - 'registration' (Forms)
 - 'invoice' (Payment)
 - 'vault_map', 'liberty_map', 'frankford_map' (GPS)
+
+**📆 CALENDAR SCHEDULING:**
+- You can check availability and book VIP tours directly.
+- Use `check_availability` first to see if a slot is free.
+- Use `book_appointment` to confirm the booking.
+- Ask for the customer's preferred date/time and email for the invite.
 """
 
 @app.route('/', methods=['GET'])
@@ -156,8 +162,6 @@ def inbound_call():
                         }
                     ]
                 },
-                "serverMessages": ["conversation-update", "end-of-call-report", "speech-update", "status-update", "tool-calls", "assistant.started"],
-                "transcriber": {"provider": "deepgram", "model": "nova-2", "language": "en-US"},
                 "voice": {"provider": "11labs", "voiceId": "21m00Tcm4TlvDq8ikWAM"}
             }
         }
@@ -292,7 +296,7 @@ def send_sms_tool():
 def calendar_tool_route():
     """Endpoint for Calendar tool calls"""
     data = request.json
-    print(f"🗓️ CALENDAR TOOL REQUEST: {data}")
+    print(f"🗓️ CALENDAR TOOL REQUEST: {json.dumps(data, indent=2)}")
     
     # Extract tool call info
     tool_call_id = None
@@ -300,31 +304,55 @@ def calendar_tool_route():
     args = {}
     
     try:
-        # Standard VAPI tool call structure
-        tool_calls = data.get('message', {}).get('toolCalls', [])
-        if tool_calls:
-            tool_call_id = tool_calls[0].get('id')
-            function = tool_calls[0].get('function', {})
-            function_name = function.get('name')
-            args = function.get('arguments', {})
+        # Try toolCallList first (VAPI's newer format)
+        tool_call_list = data.get('message', {}).get('toolCallList', [])
+        if tool_call_list:
+            tool_call_id = tool_call_list[0].get('id')
+            function_name = tool_call_list[0].get('name') or tool_call_list[0].get('function', {}).get('name')
+            args = tool_call_list[0].get('arguments', {})
+            # Arguments might be a string that needs parsing
+            if isinstance(args, str):
+                args = json.loads(args)
+        else:
+            # Fallback: Standard VAPI tool call structure
+            tool_calls = data.get('message', {}).get('toolCalls', [])
+            if tool_calls:
+                tool_call_id = tool_calls[0].get('id')
+                function = tool_calls[0].get('function', {})
+                function_name = function.get('name')
+                args = function.get('arguments', {})
+                # Arguments might be a string that needs parsing
+                if isinstance(args, str):
+                    args = json.loads(args)
     except Exception as e:
-        print(f"Error parsing tool data: {e}")
+        print(f"❌ Error parsing tool data: {e}")
 
-    result = "Error: Unknown tool."
+    print(f"🔧 Function: {function_name}, Args: {args}")
+    
+    result = "Error: Unknown tool or missing function name."
     
     if function_name == 'check_availability':
-        result = calendar_service.check_availability(
-            args.get('start_time'), 
-            args.get('end_time')
-        )
+        start = args.get('start_time')
+        end = args.get('end_time')
+        if start and end:
+            result = calendar_service.check_availability(start, end)
+        else:
+            result = "Error: Missing start_time or end_time"
+            
     elif function_name == 'book_appointment':
-        result = calendar_service.book_appointment(
-            summary=args.get('summary'),
-            start_time=args.get('start_time'),
-            end_time=args.get('end_time'),
-            attendee_email=args.get('attendee_email'),
-            description=args.get('description', '')
-        )
+        summary = args.get('summary')
+        start = args.get('start_time')
+        end = args.get('end_time')
+        if summary and start and end:
+            result = calendar_service.book_appointment(
+                summary=summary,
+                start_time_iso=start,
+                end_time_iso=end,
+                attendee_email=args.get('attendee_email'),
+                description=args.get('description', '')
+            )
+        else:
+            result = "Error: Missing required fields (summary, start_time, end_time)"
         
     print(f"🗓️ CALENDAR RESULT: {result}")
 
