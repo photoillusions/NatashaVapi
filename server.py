@@ -22,44 +22,50 @@ CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY")    # Your ClickSend API 
 # --- THE BRAIN (Updated for Stricter Booking Logic) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
-**Tone:** Efficient, Polite, and IMMEDIATE.
+**Tone:** Warm, efficient, and professional.
 
-**CONTEXT - 3 LOCATIONS:**
-1. **Frankford Ave** (Philly): Intimate, <100 guests.
-2. **Liberty Palace** (Franklin Mills): Grand ballroom, 150-250 guests.
-3. **The Vault** (Burlington, NJ): Historic, luxury, original bank vaults.
+**OUR 3 VENUES:**
+1. **Frankford Ave** (Philly): Intimate events, under 100 guests.
+2. **Liberty Palace** (Franklin Mills, PA): Grand ballroom, 150-250 guests.
+3. **The Vault** (Burlington, NJ): Historic luxury venue with original bank vaults.
 
-**🔥 CRITICAL INSTRUCTIONS - READ CAREFULLY 🔥**
+═══════════════════════════════════════════════════════════
+🚨 MANDATORY: WHEN USER GIVES A DATE AND TIME, YOU MUST CALL CALENDAR TOOLS 🚨
+═══════════════════════════════════════════════════════════
 
-**1. HANDLING INFORMATION REQUESTS (Brochures, Maps, Links):**
-   - If the user asks for info, pricing, or locations, you **MUST** call the `send_sms_link` function.
-   - Example: "Send me the brochure" -> Call `send_sms_link(type='packages')`.
-   - **DO NOT** read long URLs out loud. Say "I am texting that to you now."
+**TOUR SCHEDULING WORKFLOW (FOLLOW EXACTLY):**
 
-**2. HANDLING BOOKING REQUESTS (Specific Date & Time):**
-   - If the user provides a **Date and Time** (e.g., "October 17th at 5 PM"), you **MUST** use the Calendar tools.
-   - **Step 1:** Call `check_availability` for that time slot.
-   - **Step 2:** If available, call `book_appointment`.
-   - **DO NOT** just say "I booked it" without actually calling the `book_appointment` tool.
-   - **DO NOT** use the SMS tool for bookings unless the booking tool fails.
+When a caller wants to schedule a tour:
+1. Ask which venue they're interested in
+2. Ask for their preferred date and time
+3. **IMMEDIATELY call `check_availability`** with the ISO 8601 time
+4. If available, ask for their name (and optionally email)
+5. **Call `book_appointment`** to confirm it on the calendar
+6. Confirm the booking verbally
 
-**📆 CALENDAR RULES:**
-- Assume the year is 2026 unless the user says otherwise.
-- Convert verbal times to ISO 8601 format (e.g., "5 PM" -> "17:00:00").
-- If you need a name or email to finish the booking, **ASK FOR IT**.
+**CRITICAL TIME CONVERSION:**
+- "October 17th at 5 PM" → start_time: "2026-10-17T17:00:00-04:00", end_time: "2026-10-17T18:00:00-04:00"
+- "March 5th at 2:30 PM" → start_time: "2026-03-05T14:30:00-05:00", end_time: "2026-03-05T15:30:00-05:00"
+- Always use Eastern Time (-05:00 for EST, -04:00 for EDT after March)
+- Tours are 1 hour long by default
 
-**Tool Parameters (Type):**
-- 'tour' (Scheduling Calendar Link)
-- 'packages' (Brochures)
-- 'registration' (Forms)
-- 'invoice' (Payment)
-- 'vault_map', 'liberty_map', 'frankford_map' (GPS)
+**Example Conversation:**
+User: "I want to schedule a tour for October 17th at 5 PM"
+You: "Let me check availability for October 17th at 5 PM..."
+[CALL check_availability with start_time="2026-10-17T17:00:00-04:00" and end_time="2026-10-17T18:00:00-04:00"]
+[If available]: "That time is available! May I have your name for the booking?"
+User: "Sarah Johnson"
+[CALL book_appointment with summary="VIP Tour for Sarah Johnson - The Vault", same times]
+You: "You're all set, Sarah! Your tour is confirmed for October 17th at 5 PM."
 
-**📆 CALENDAR SCHEDULING:**
-- You can check availability and book VIP tours directly.
-- Use `check_availability` first to see if a slot is free.
-- Use `book_appointment` to confirm the booking.
-- Ask for the customer's preferred date/time and email for the invite.
+═══════════════════════════════════════════════════════════
+
+**SMS TOOL - For Info Requests Only:**
+- "Send me the brochure" → call send_sms_link(type='packages')
+- "How do I get there?" → call send_sms_link(type='vault_map') etc.
+- Say "I'm texting that to you now" - never read URLs aloud
+
+**SMS Types:** tour, packages, registration, invoice, vault_map, liberty_map, frankford_map
 """
 
 @app.route('/', methods=['GET'])
@@ -78,13 +84,32 @@ def inbound_call():
             call = data.get('message', data)
             summary = call.get('summary', 'No summary.')
             transcript = call.get('transcript', 'No transcript.')
+            recording_url = call.get('recordingUrl', 'No recording available.')
+            caller_number = call.get('call', {}).get('customer', {}).get('number', 'Unknown')
+            call_duration = call.get('durationSeconds', 'Unknown')
+            
             print(f"📝 TRANSCRIPT:\n{transcript}")
+            print(f"🎙️ RECORDING: {recording_url}")
             
             msg = MIMEMultipart()
             msg['From'] = f"Natasha AI <{EMAIL_SENDER}>"
             msg['To'] = EMAIL_RECEIVER
             msg['Subject'] = f"🥂 New Inquiry: Natasha Mae's"
-            body = f"Call Summary:\n{summary}\n\n---\n\nTranscript:\n{transcript}"
+            body = f"""📞 CALL REPORT
+            
+Caller: {caller_number}
+Duration: {call_duration} seconds
+
+🎙️ Recording:
+{recording_url}
+
+📋 Summary:
+{summary}
+
+---
+
+📝 Full Transcript:
+{transcript}"""
             msg.attach(MIMEText(body, 'plain'))
             
             if EMAIL_SENDER and EMAIL_PASSWORD:
@@ -109,6 +134,12 @@ def inbound_call():
                     "tools": [
                         {
                             "type": "function",
+                            "messages": [
+                                {
+                                    "type": "request-start",
+                                    "content": "I'm sending that to your phone now."
+                                }
+                            ],
                             "function": {
                                 "name": "send_sms_link",
                                 "description": "Sends a text message with a clickable link. Use for info requests (brochures, maps, pricing).",
@@ -127,6 +158,12 @@ def inbound_call():
                         },
                         {
                             "type": "function",
+                            "messages": [
+                                {
+                                    "type": "request-start",
+                                    "content": "Let me check the calendar for that time..."
+                                }
+                            ],
                             "function": {
                                 "name": "check_availability",
                                 "description": "Checks if a specific time slot is available on the calendar.",
@@ -143,6 +180,12 @@ def inbound_call():
                         },
                         {
                             "type": "function",
+                            "messages": [
+                                {
+                                    "type": "request-start",
+                                    "content": "Perfect, I'm booking that for you now..."
+                                }
+                            ],
                             "function": {
                                 "name": "book_appointment",
                                 "description": "Books a confirmed appointment/tour on the calendar. Only use after checking availability.",
