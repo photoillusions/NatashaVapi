@@ -405,20 +405,24 @@ def calendar_tool_route():
     if function_name == 'check_availability':
         start = args.get('start_time')
         duration = args.get('duration', '1_hour')
-        end = args.get('end_time') or calculate_end_time(start, duration)
         
-        if start:
-            result = calendar_service.check_availability(start, end)
+        if not start:
+            result = "Error: Please provide the date and time. Ask the customer for a specific date and time."
         else:
-            result = "Error: Missing start_time"
+            end = args.get('end_time') or calculate_end_time(start, duration)
+            result = calendar_service.check_availability(start, end)
             
     elif function_name == 'book_appointment':
         summary = args.get('summary')
         start = args.get('start_time')
         duration = args.get('duration', '1_hour')
-        end = args.get('end_time') or calculate_end_time(start, duration)
         
-        if summary and start:
+        if not summary:
+            result = "Error: Please provide a summary/title for the booking (e.g. 'Wedding - The Vault - Smith Family')"
+        elif not start:
+            result = "Error: Please provide the start_time in ISO 8601 format"
+        else:
+            end = args.get('end_time') or calculate_end_time(start, duration)
             result = calendar_service.book_appointment(
                 summary=summary,
                 start_time_iso=start,
@@ -426,8 +430,6 @@ def calendar_tool_route():
                 attendee_email=args.get('attendee_email'),
                 description=args.get('description', '')
             )
-        else:
-            result = "Error: Missing required fields (summary, start_time)"
         
     print(f"🗓️ CALENDAR RESULT: {result}")
 
