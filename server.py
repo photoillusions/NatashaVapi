@@ -374,19 +374,51 @@ def calendar_tool_route():
     
     result = "Error: Unknown tool or missing function name."
     
+    # Duration mapping
+    duration_map = {
+        "1_hour": 1,
+        "4_hours": 4,
+        "6_hours": 6
+    }
+    
+    def calculate_end_time(start_iso, duration_key):
+        """Calculate end time by adding duration hours to start time"""
+        from datetime import datetime, timedelta
+        import re
+        
+        hours = duration_map.get(duration_key, 1)  # Default 1 hour
+        
+        # Parse ISO time (handle timezone offset)
+        # Example: 2026-10-17T17:00:00-04:00
+        match = re.match(r'(.+?)([+-]\d{2}:\d{2})$', start_iso)
+        if match:
+            dt_part, tz_part = match.groups()
+            dt = datetime.fromisoformat(dt_part)
+            end_dt = dt + timedelta(hours=hours)
+            return end_dt.isoformat() + tz_part
+        else:
+            # No timezone, just add hours
+            dt = datetime.fromisoformat(start_iso.replace('Z', ''))
+            end_dt = dt + timedelta(hours=hours)
+            return end_dt.isoformat()
+    
     if function_name == 'check_availability':
         start = args.get('start_time')
-        end = args.get('end_time')
-        if start and end:
+        duration = args.get('duration', '1_hour')
+        end = args.get('end_time') or calculate_end_time(start, duration)
+        
+        if start:
             result = calendar_service.check_availability(start, end)
         else:
-            result = "Error: Missing start_time or end_time"
+            result = "Error: Missing start_time"
             
     elif function_name == 'book_appointment':
         summary = args.get('summary')
         start = args.get('start_time')
-        end = args.get('end_time')
-        if summary and start and end:
+        duration = args.get('duration', '1_hour')
+        end = args.get('end_time') or calculate_end_time(start, duration)
+        
+        if summary and start:
             result = calendar_service.book_appointment(
                 summary=summary,
                 start_time_iso=start,
@@ -395,7 +427,7 @@ def calendar_tool_route():
                 description=args.get('description', '')
             )
         else:
-            result = "Error: Missing required fields (summary, start_time, end_time)"
+            result = "Error: Missing required fields (summary, start_time)"
         
     print(f"🗓️ CALENDAR RESULT: {result}")
 
