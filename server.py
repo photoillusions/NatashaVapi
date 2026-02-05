@@ -4,6 +4,8 @@ import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify
+import json
+import calendar_service  # Import our helper module
 
 app = Flask(__name__)
 
@@ -17,7 +19,7 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") # Where call reports go
 CLICKSEND_USERNAME = os.environ.get("CLICKSEND_USERNAME")  # Your ClickSend username (email)
 CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY")    # Your ClickSend API Key
 
-# --- THE BRAIN ---
+# --- THE BRAIN (Updated for Stricter Booking Logic) ---
 SYSTEM_PROMPT = """
 You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 **Tone:** Efficient, Polite, and IMMEDIATE.
@@ -27,28 +29,36 @@ You are "Jessica," the Booking Concierge for **Natasha Mae's Enterprises**.
 2. **Liberty Palace** (Franklin Mills): Grand ballroom, 150-250 guests.
 3. **The Vault** (Burlington, NJ): Historic, luxury, original bank vaults.
 
-**🔥 PRIME DIRECTIVE: ACTION OVER TALK 🔥**
-If the caller wants a text/link/info, you must **CALL THE FUNCTION `send_sms_link`**.
-Do not just *say* you sent it. You must *execute* the tool.
+**🔥 CRITICAL INSTRUCTIONS - READ CAREFULLY 🔥**
 
-**RULES OF ENGAGEMENT:**
-1. **NO PERMISSION:** Do NOT ask "Can I have your number?" you have it.
-2. **NO DELAY:** If they say "Yes" to a text, trigger the tool INSTANTLY.
-3. **TOOL FIRST:** Trigger the tool *before* you say "I've sent it."
+**1. HANDLING INFORMATION REQUESTS (Brochures, Maps, Links):**
+   - If the user asks for info, pricing, or locations, you **MUST** call the `send_sms_link` function.
+   - Example: "Send me the brochure" -> Call `send_sms_link(type='packages')`.
+   - **DO NOT** read long URLs out loud. Say "I am texting that to you now."
+
+**2. HANDLING BOOKING REQUESTS (Specific Date & Time):**
+   - If the user provides a **Date and Time** (e.g., "October 17th at 5 PM"), you **MUST** use the Calendar tools.
+   - **Step 1:** Call `check_availability` for that time slot.
+   - **Step 2:** If available, call `book_appointment`.
+   - **DO NOT** just say "I booked it" without actually calling the `book_appointment` tool.
+   - **DO NOT** use the SMS tool for bookings unless the booking tool fails.
+
+**📆 CALENDAR RULES:**
+- Assume the year is 2026 unless the user says otherwise.
+- Convert verbal times to ISO 8601 format (e.g., "5 PM" -> "17:00:00").
+- If you need a name or email to finish the booking, **ASK FOR IT**.
 
 **Tool Parameters (Type):**
-- 'tour' (Scheduling Calendar)
+- 'tour' (Scheduling Calendar Link)
 - 'packages' (Brochures)
 - 'registration' (Forms)
 - 'invoice' (Payment)
-- 'vault_map' (GPS)
-- 'liberty_map' (GPS)
-- 'frankford_map' (GPS)
+- 'vault_map', 'liberty_map', 'frankford_map' (GPS)
 """
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (ClickSend SMS Edition v2)"
+    return "Natasha Mae's Server Online (Calendar & SMS Edition v3)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -95,7 +105,7 @@ def inbound_call():
                             "type": "function",
                             "function": {
                                 "name": "send_sms_link",
-                                "description": "Sends a text message with a clickable link. REQUIRED whenever user asks for text/info.",
+                                "description": "Sends a text message with a clickable link. Use for info requests (brochures, maps, pricing).",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -108,6 +118,41 @@ def inbound_call():
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/send-sms"}
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "check_availability",
+                                "description": "Checks if a specific time slot is available on the calendar.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "start_time": {"type": "string", "description": "ISO 8601 start time (e.g. 2026-10-17T17:00:00-05:00)"},
+                                        "end_time": {"type": "string", "description": "ISO 8601 end time (e.g. 2026-10-17T18:00:00-05:00)"}
+                                    },
+                                    "required": ["start_time", "end_time"]
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "book_appointment",
+                                "description": "Books a confirmed appointment/tour on the calendar. Only use after checking availability.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "summary": {"type": "string", "description": "Title of event (e.g. 'Tour for Tony George')"},
+                                        "start_time": {"type": "string", "description": "ISO 8601 start time"},
+                                        "end_time": {"type": "string", "description": "ISO 8601 end time"},
+                                        "attendee_email": {"type": "string", "description": "Guest email for invite"},
+                                        "description": {"type": "string", "description": "Notes (phone number, location preference)"}
+                                    },
+                                    "required": ["summary", "start_time", "end_time"]
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
                         }
                     ]
                 },
@@ -124,10 +169,10 @@ def inbound_call():
     return jsonify({"status": "acknowledged"}), 200
 
 # =====================================================
-# � CLICKSEND SMS API HANDLER
+# 📨 CLICKSEND SMS API HANDLER
 # =====================================================
 def handle_tool_call(data):
-    print("� TRIGGERING CLICKSEND SMS...")
+    print("🔔 TOOL CALL RECEIVED")
     
     # 1. EXTRACT ARGS
     args = {}
@@ -242,6 +287,53 @@ def handle_tool_call(data):
 def send_sms_tool():
     """Direct endpoint for SMS tool calls"""
     return handle_tool_call(request.json)
+
+@app.route('/calendar-tool', methods=['POST'])
+def calendar_tool_route():
+    """Endpoint for Calendar tool calls"""
+    data = request.json
+    print(f"🗓️ CALENDAR TOOL REQUEST: {data}")
+    
+    # Extract tool call info
+    tool_call_id = None
+    function_name = None
+    args = {}
+    
+    try:
+        # Standard VAPI tool call structure
+        tool_calls = data.get('message', {}).get('toolCalls', [])
+        if tool_calls:
+            tool_call_id = tool_calls[0].get('id')
+            function = tool_calls[0].get('function', {})
+            function_name = function.get('name')
+            args = function.get('arguments', {})
+    except Exception as e:
+        print(f"Error parsing tool data: {e}")
+
+    result = "Error: Unknown tool."
+    
+    if function_name == 'check_availability':
+        result = calendar_service.check_availability(
+            args.get('start_time'), 
+            args.get('end_time')
+        )
+    elif function_name == 'book_appointment':
+        result = calendar_service.book_appointment(
+            summary=args.get('summary'),
+            start_time=args.get('start_time'),
+            end_time=args.get('end_time'),
+            attendee_email=args.get('attendee_email'),
+            description=args.get('description', '')
+        )
+        
+    print(f"🗓️ CALENDAR RESULT: {result}")
+
+    return jsonify({
+        "results": [{
+            "toolCallId": tool_call_id,
+            "result": result
+        }]
+    }), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
