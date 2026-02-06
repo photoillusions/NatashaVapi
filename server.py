@@ -426,6 +426,15 @@ def calendar_tool_route():
                 attendee_email=args.get('attendee_email'),
                 description=args.get('description', '')
             )
+            
+            # AUTO-SEND CONFIRMATION SMS after successful booking
+            if result.startswith("Success"):
+                phone_raw = data.get('message', {}).get('call', {}).get('customer', {}).get('number', '')
+                phone = clean_phone(phone_raw)
+                if phone:
+                    confirmation_msg = "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit https://www.natashamaes.com"
+                    sms_result = send_clicksend_sms(phone, confirmation_msg)
+                    print(f"📱 AUTO-SMS SENT: {sms_result}")
     else:
         result = f"Error: Unknown function '{function_name}'"
     
