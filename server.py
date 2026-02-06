@@ -366,15 +366,15 @@ def send_sms_tool():
     req_type = args.get('type', 'default').lower()
     
     message_map = {
-        "tour": "Natasha Mae's: Schedule your VIP tour: https://www.natashamaes.com/contact-us",
-        "packages": "Natasha Mae's: View packages: https://www.natashamaes.com/packages",
-        "registration": "Natasha Mae's: Register here: https://www.natashamaes.com/register",
-        "invoice": "Natasha Mae's: Your invoice: https://www.natashamaes.com/payment",
-        "confirmation": "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit https://www.natashamaes.com",
+        "tour": "Natasha Mae's: Schedule your VIP tour: www.natashamaes.com/contact-us",
+        "packages": "Natasha Mae's: View packages: www.natashamaes.com/packages",
+        "registration": "Natasha Mae's: Register here: www.natashamaes.com/register",
+        "invoice": "Natasha Mae's: Your invoice: www.natashamaes.com/payment",
+        "confirmation": "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit www.natashamaes.com",
         "vault_map": "The Vault GPS: https://goo.gl/maps/placeholder",
         "liberty_map": "Liberty Palace GPS: https://goo.gl/maps/placeholder",
         "frankford_map": "Frankford Ave GPS: https://goo.gl/maps/placeholder",
-        "default": "Natasha Mae's: https://www.natashamaes.com"
+        "default": "Natasha Mae's: www.natashamaes.com"
     }
     
     message_body = message_map.get(req_type, message_map["default"])
