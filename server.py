@@ -370,6 +370,7 @@ def send_sms_tool():
         "packages": "Natasha Mae's: View packages: https://www.natashamaes.com/packages",
         "registration": "Natasha Mae's: Register here: https://www.natashamaes.com/register",
         "invoice": "Natasha Mae's: Your invoice: https://www.natashamaes.com/payment",
+        "confirmation": "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit https://www.natashamaes.com",
         "vault_map": "The Vault GPS: https://goo.gl/maps/placeholder",
         "liberty_map": "Liberty Palace GPS: https://goo.gl/maps/placeholder",
         "frankford_map": "Frankford Ave GPS: https://goo.gl/maps/placeholder",
