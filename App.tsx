@@ -4,6 +4,11 @@ import { Instagram, Facebook, Linkedin } from 'lucide-react';
 import Home from './pages/Home';
 import Venues from './pages/Venues';
 import Gallery from './pages/Gallery';
+import Designs from './pages/Designs';
+import ThemedSetups from './pages/ThemedSetups';
+import DivineDining from './pages/DivineDining';
+import Pricing from './pages/Pricing';
+import Contact from './pages/Contact';
 
 // --- Professional Logo ---
 export const ProfessionalLogo = () => (
@@ -130,8 +135,13 @@ const App: React.FC = () => {
         
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/designs" element={<Designs />} />
           <Route path="/venues" element={<Venues />} />
           <Route path="/gallery" element={<Gallery />} />
+          <Route path="/themed-setups" element={<ThemedSetups />} />
+          <Route path="/divine-dining" element={<DivineDining />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/contact" element={<Contact />} />
         </Routes>
         
         <Footer />
