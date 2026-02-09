@@ -40,12 +40,12 @@ const Home = () => {
         
         <div className="relative z-10 text-center px-6 max-w-6xl pt-32 pb-20">
           <div className="space-y-2 mb-12 animate-fadeInUp">
-            <span className="text-white text-base md:text-lg uppercase tracking-[0.6em] font-light opacity-90 block leading-none mt-8">The Premier Banquet Experience</span>
+            <span className="text-white text-base md:text-lg uppercase tracking-[0.6em] font-light opacity-90 block leading-none mt-8">Natasha Mae's Enterprises</span>
             <h2 className="text-5xl md:text-7xl text-white font-bold leading-[1.1] tracking-tighter">
-              Three Iconic <br /><span className="font-serif italic text-white/80">Destinations</span>
+              A Trio of <br /><span className="font-serif italic text-white/80">Premier Destinations</span>
             </h2>
             <p className="text-stone-300 text-lg md:text-xl max-w-3xl mx-auto font-light italic leading-relaxed opacity-80">
-              "One Unforgettable Standard of Elegance Across the Delaware Valley."
+              "From historic grandeur to modern elegance, our portfolio of curated venues offers the perfect setting for your next celebration."
             </p>
           </div>
           

@@ -42,6 +42,7 @@ const Navbar = () => {
 
   const links = [
     { name: 'HOME', href: '/' },
+    { name: 'VENUES', href: '/venues' },
     { name: 'THEMED SET-UPS', href: '/themed-setups' },
     { name: "NATASHA'S HEAVENLY DESIGNS", href: '/designs' },
     { name: 'DIVINE DINING', href: '/divine-dining' },
