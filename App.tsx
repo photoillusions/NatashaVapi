@@ -131,6 +131,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <div className="bg-stone-950 selection:bg-emerald-900 selection:text-white scroll-smooth min-h-screen">
+        {/* v2.0 - Updated navigation and all pages */}
         <Navbar />
         
         <Routes>
