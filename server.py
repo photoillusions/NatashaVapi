@@ -54,10 +54,11 @@ You have two Google Calendar tools: google_calendar_check_availability_tool and 
 - Customer gives a specific DATE and TIME → Use google_calendar_check_availability_tool first
 - After confirming availability → Use google_calendar_tool to reserve it
 
-**HOW TO FORMAT dateTime:**
-- "October 17th at 5 PM" → "2026-10-17T17:00:00"
-- "June 15th at 2 PM" → "2026-06-15T14:00:00"
+**HOW TO FORMAT dateTime (MUST INCLUDE TIMEZONE):**
+- "October 17th at 5 PM" → "2026-10-17T17:00:00-04:00"
+- "June 15th at 2 PM" → "2026-06-15T14:00:00-04:00"
 - Always assume year 2026 unless stated otherwise
+- ALWAYS include the timezone offset: -04:00 for Eastern Daylight Time (Mar-Nov) or -05:00 for Eastern Standard Time (Nov-Mar)
 
 **DURATION (in minutes):**
 - 60 = Tours, site visits (1 hour)
@@ -70,7 +71,7 @@ Customer: "I want to book a wedding at The Vault on October 17th at 5 PM"
 
 Step 1 - Check availability:
 → Call google_calendar_check_availability_tool with:
-   dateTime: "2026-10-17T17:00:00"
+   dateTime: "2026-10-17T17:00:00-04:00"
    duration: 360
 
 Step 2 - If available, get their name:
@@ -79,11 +80,12 @@ Step 2 - If available, get their name:
 Step 3 - Book it:
 → Call google_calendar_tool with:
    title: "Wedding - The Vault - [Customer Name]"
-   dateTime: "2026-10-17T17:00:00"
+   dateTime: "2026-10-17T17:00:00-04:00"
    duration: 360
 
-Step 4 - Confirm (NEVER read the calendar link):
-→ "You're all set! I've reserved The Vault for your wedding on October 17th, 2026 at 5 PM. I'm texting you the calendar invite now."
+Step 4 - Confirm AND send confirmation text (NEVER read the calendar link):
+→ Say: "You're all set! I've reserved The Vault for your wedding on October 17th, 2026 at 5 PM. I'm texting you the confirmation now."
+→ IMMEDIATELY call send_sms_link(type: "confirmation") to send the confirmation text
 
 **CRITICAL CALENDAR RULES:**
 1. ALWAYS call google_calendar_check_availability_tool BEFORE telling them a date is available
@@ -91,6 +93,7 @@ Step 4 - Confirm (NEVER read the calendar link):
 3. ALWAYS get customer's name before calling google_calendar_tool
 4. Include venue name and event type in the title
 5. NEVER read the calendar link aloud - just say you're texting it
+6. ALWAYS call send_sms_link(type: "confirmation") IMMEDIATELY after successful booking
 
 ═══════════════════════════════════════════════════════════════════
 CRITICAL RULES
@@ -147,13 +150,14 @@ SCENARIO 3B: BOOKING A TOUR DIRECTLY
 Customer: "I want to schedule a tour for October 17th at 5 PM"
 
 You: "Let me check our availability for that time..."
-→ Call google_calendar_check_availability_tool(dateTime: "2026-10-17T17:00:00", duration: 60)
+→ Call google_calendar_check_availability_tool(dateTime: "2026-10-17T17:00:00-04:00", duration: 60)
 
 If available: "October 17th at 5 PM is available! May I have your name?"
 Customer: "John Smith"
-→ Call google_calendar_tool(title: "VIP Tour - The Vault - John Smith", dateTime: "2026-10-17T17:00:00", duration: 60)
+→ Call google_calendar_tool(title: "VIP Tour - The Vault - John Smith", dateTime: "2026-10-17T17:00:00-04:00", duration: 60)
 
-You: "You're all set, John! Your tour is confirmed for October 17th at 5 PM at The Vault. I'm texting you the calendar invite now."
+You: "You're all set, John! Your tour is confirmed for October 17th at 5 PM at The Vault. I'm texting you the confirmation now."
+→ IMMEDIATELY call send_sms_link(type: "confirmation")
 
 SCENARIO 4: PACKAGES & PRICING
 Goal: Avoid Sticker Shock -> Send Package List.
@@ -286,32 +290,35 @@ SCENARIO 22: BOOKING AN EVENT DATE DIRECTLY
 Customer: "I want to book my wedding for June 15th at 5 PM at The Vault"
 
 You: "Let me check our availability for June 15th..."
-→ Call google_calendar_check_availability_tool(dateTime: "2026-06-15T17:00:00", duration: 360)
+→ Call google_calendar_check_availability_tool(dateTime: "2026-06-15T17:00:00-04:00", duration: 360)
 
 If available: "June 15th is available! May I have your name to reserve the date?"
 Customer: "Sarah Johnson"
-→ Call google_calendar_tool(title: "Wedding - The Vault - Sarah Johnson", dateTime: "2026-06-15T17:00:00", duration: 360)
+→ Call google_calendar_tool(title: "Wedding - The Vault - Sarah Johnson", dateTime: "2026-06-15T17:00:00-04:00", duration: 360)
 
 You: "Wonderful, Sarah! I've reserved The Vault for your wedding on June 15th, 2026. I'm texting you the confirmation now."
+→ IMMEDIATELY call send_sms_link(type: "confirmation")
 
 ═══════════════════════════════════════════════════════════════════
 TOOLS AVAILABLE
 ═══════════════════════════════════════════════════════════════════
 
 SMS TOOL - send_sms_link:
-Types: tour, packages, registration, invoice, vault_map, liberty_map, frankford_map
-If the user asks for any of these, use the tool immediately. NEVER read URLs out loud - just say "I've sent that to your phone."
+Types: tour, packages, registration, invoice, confirmation, vault_map, liberty_map, frankford_map
+- Use "confirmation" type IMMEDIATELY after booking any event or tour
+- If the user asks for any of these, use the tool immediately
+- NEVER read URLs out loud - just say "I've sent that to your phone."
 
 GOOGLE CALENDAR TOOLS:
 - google_calendar_check_availability_tool: Check if a date/time is free (always use BEFORE confirming availability)
 - google_calendar_tool: Reserve a tour or event (always use AFTER checking availability and getting customer name)
 
-REMEMBER: After booking, NEVER read the calendar link. Just say "I'm texting you the calendar invite now."
+REMEMBER: After booking, NEVER read the calendar link. Say "I'm texting you the confirmation now" and IMMEDIATELY call send_sms_link(type: "confirmation").
 """
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (v6 - NO URL READING)"
+    return "Natasha Mae's Server Online (v7 - ClickSend + Fixed Maps)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -343,6 +350,9 @@ def inbound_call():
                 server.login(EMAIL_SENDER, EMAIL_PASSWORD)
                 server.send_message(msg)
                 server.quit()
+                print(f"✅ Email sent to {EMAIL_RECEIVER}")
+            else:
+                print(f"⚠️ Email not sent - missing credentials")
         except Exception as e:
             print(f"❌ Report Email Failed: {e}")
         return jsonify({"status": "OK"}), 200
@@ -355,41 +365,52 @@ def send_sms_tool():
     """SMS Tool endpoint"""
     data = request.json
     print(f"📩 SMS TOOL HIT")
+    print(f"📦 Raw payload keys: {list(data.get('message', {}).keys())}")
     
     # Extract args
     tool_call_id, args = extract_tool_args(data)
+    print(f"🔧 Tool Call ID: {tool_call_id}")
+    print(f"📋 Args: {args}")
     
-    # Get phone
+    # Get phone from caller ID
     phone_raw = data.get('message', {}).get('call', {}).get('customer', {}).get('number', '')
     phone = clean_phone(phone_raw)
+    print(f"📱 Phone: {phone_raw} → {phone}")
     
     req_type = args.get('type', 'default').lower()
+    print(f"📝 Request type: {req_type}")
     
+    # ============================================
+    # SMS MESSAGE MAP - ALL LINKS USE natashamaes.com
+    # ============================================
     message_map = {
-        "tour": "Natasha Mae's: Schedule your VIP tour: www.natashamaes.com/contact-us",
-        "packages": "Natasha Mae's: View packages: www.natashamaes.com/packages",
-        "registration": "Natasha Mae's: Register here: www.natashamaes.com/register",
-        "invoice": "Natasha Mae's: Your invoice: www.natashamaes.com/payment",
-        "confirmation": "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit www.natashamaes.com",
-        "vault_map": "The Vault GPS: https://goo.gl/maps/placeholder",
-        "liberty_map": "Liberty Palace GPS: https://goo.gl/maps/placeholder",
-        "frankford_map": "Frankford Ave GPS: https://goo.gl/maps/placeholder",
-        "default": "Natasha Mae's: www.natashamaes.com"
+        "tour": "Natasha Mae's Enterprises: Schedule your VIP tour here: www.natashamaes.com/contact-us",
+        "packages": "Natasha Mae's Enterprises: View our event packages: www.natashamaes.com/packages",
+        "registration": "Natasha Mae's Enterprises: Complete your registration to secure your date: www.natashamaes.com/register",
+        "invoice": "Natasha Mae's Enterprises: View and pay your invoice: www.natashamaes.com/payment",
+        "confirmation": "Natasha Mae's Enterprises: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit www.natashamaes.com",
+        "vault_map": "Natasha Mae's Enterprises: The Vault directions - 322 High St, Burlington, NJ 08016: www.natashamaes.com/vault-directions",
+        "liberty_map": "Natasha Mae's Enterprises: Liberty Palace directions - 1 Franklin Mills Blvd, Philadelphia, PA: www.natashamaes.com/liberty-directions",
+        "frankford_map": "Natasha Mae's Enterprises: Frankford Ave directions - 4446 Frankford Ave, Philadelphia, PA: www.natashamaes.com/frankford-directions",
+        "default": "Natasha Mae's Enterprises: Visit us at www.natashamaes.com or call 267-655-0230"
     }
     
     message_body = message_map.get(req_type, message_map["default"])
+    print(f"💬 Message: {message_body}")
+    
     result = send_clicksend_sms(phone, message_body)
+    print(f"📤 Result: {result}")
     
     return jsonify({"results": [{"toolCallId": tool_call_id, "result": result}]}), 200
 
 
 @app.route('/calendar-tool', methods=['POST'])
 def calendar_tool_route():
-    """Calendar Tool endpoint - FIXED EXTRACTION"""
+    """Calendar Tool endpoint"""
     data = request.json
     print(f"🗓️ ========== CALENDAR TOOL ==========")
     
-    # Extract tool call info using CORRECT path
+    # Extract tool call info
     tool_call_id, args = extract_tool_args(data)
     function_name = extract_function_name(data)
     
@@ -432,7 +453,7 @@ def calendar_tool_route():
                 phone_raw = data.get('message', {}).get('call', {}).get('customer', {}).get('number', '')
                 phone = clean_phone(phone_raw)
                 if phone:
-                    confirmation_msg = "Natasha Mae's: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit https://www.natashamaes.com"
+                    confirmation_msg = "Natasha Mae's Enterprises: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit www.natashamaes.com"
                     sms_result = send_clicksend_sms(phone, confirmation_msg)
                     print(f"📱 AUTO-SMS SENT: {sms_result}")
     else:
@@ -447,7 +468,7 @@ def calendar_tool_route():
 def extract_tool_args(data):
     """
     Extract tool call ID and arguments from VAPI payload.
-    VAPI puts args at: toolCallList[0].function.arguments (NOT toolCallList[0].arguments!)
+    VAPI puts args at: toolCallList[0].function.arguments
     """
     tool_call_id = None
     args = {}
@@ -460,11 +481,9 @@ def extract_tool_args(data):
         item = tool_call_list[0]
         tool_call_id = item.get('id')
         
-        # CRITICAL FIX: Arguments are inside 'function' object!
         func = item.get('function', {})
         args = func.get('arguments', {})
         
-        # Parse if string
         if isinstance(args, str):
             try:
                 args = json.loads(args)
@@ -570,11 +589,14 @@ def clean_phone(phone_raw):
 def send_clicksend_sms(phone, message_body):
     """Send SMS via ClickSend"""
     if not CLICKSEND_USERNAME or not CLICKSEND_API_KEY:
+        print(f"❌ Missing ClickSend credentials")
         return "Error: Missing ClickSend credentials"
     if not phone or len(phone) < 10:
+        print(f"❌ Invalid phone: {phone}")
         return f"Error: Invalid phone: {phone}"
     
     try:
+        print(f"🕵️ Sending ClickSend SMS to: {phone}")
         response = requests.post(
             "https://rest.clicksend.com/v3/sms/send",
             json={"messages": [{"to": phone, "body": message_body, "source": "NatashaMaes"}]},
@@ -582,11 +604,14 @@ def send_clicksend_sms(phone, message_body):
             headers={"Content-Type": "application/json"}
         )
         
+        print(f"📬 ClickSend Response: {response.status_code} - {response.text[:200]}")
+        
         if response.status_code == 200 and response.json().get("response_code") == "SUCCESS":
-            return f"SMS sent to {phone}"
+            return f"SMS sent successfully to {phone}"
         else:
-            return f"SMS failed: {response.text}"
+            return f"SMS failed: {response.text[:200]}"
     except Exception as e:
+        print(f"❌ ClickSend Exception: {e}")
         return f"SMS error: {e}"
 
 
