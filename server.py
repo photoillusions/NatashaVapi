@@ -13,8 +13,7 @@ app = Flask(__name__)
 EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER")
-CLICKSEND_USERNAME = os.environ.get("CLICKSEND_USERNAME")
-CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY")
+TEXTBELT_KEY = os.environ.get("TEXTBELT_KEY")
 
 SYSTEM_PROMPT = """Role: You are the AI Receptionist for Natasha Mae's Enterprises. Key Rules:
 
@@ -318,7 +317,7 @@ REMEMBER: After booking, NEVER read the calendar link. Say "I'm texting you the 
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (v7 - ClickSend + Fixed Maps)"
+    return "Natasha Mae's Server Online (v7.2 - Textbelt + Fixed Maps)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -398,7 +397,7 @@ def send_sms_tool():
     message_body = message_map.get(req_type, message_map["default"])
     print(f"💬 Message: {message_body}")
     
-    result = send_clicksend_sms(phone, message_body)
+    result = send_textbelt_sms(phone, message_body)
     print(f"📤 Result: {result}")
     
     return jsonify({"results": [{"toolCallId": tool_call_id, "result": result}]}), 200
@@ -454,7 +453,7 @@ def calendar_tool_route():
                 phone = clean_phone(phone_raw)
                 if phone:
                     confirmation_msg = "Natasha Mae's Enterprises: Your event has been confirmed! We're excited to host you. For questions, call us at 267-655-0230 or visit www.natashamaes.com"
-                    sms_result = send_clicksend_sms(phone, confirmation_msg)
+                    sms_result = send_textbelt_sms(phone, confirmation_msg)
                     print(f"📱 AUTO-SMS SENT: {sms_result}")
     else:
         result = f"Error: Unknown function '{function_name}'"
@@ -575,7 +574,7 @@ def extract_function_name(data):
 
 
 def clean_phone(phone_raw):
-    """Clean phone number for ClickSend"""
+    """Clean phone number for SMS"""
     if not phone_raw:
         return ""
     phone = str(phone_raw).replace("-", "").replace(" ", "").replace("(", "").replace(")", "").replace("+", "")
@@ -586,32 +585,32 @@ def clean_phone(phone_raw):
     return phone
 
 
-def send_clicksend_sms(phone, message_body):
-    """Send SMS via ClickSend"""
-    if not CLICKSEND_USERNAME or not CLICKSEND_API_KEY:
-        print(f"❌ Missing ClickSend credentials")
-        return "Error: Missing ClickSend credentials"
+def send_textbelt_sms(phone, message_body):
+    """Send SMS via Textbelt"""
+    if not TEXTBELT_KEY:
+        print(f"❌ Missing TEXTBELT_KEY")
+        return "Error: Missing Textbelt API key"
     if not phone or len(phone) < 10:
         print(f"❌ Invalid phone: {phone}")
         return f"Error: Invalid phone: {phone}"
     
     try:
-        print(f"🕵️ Sending ClickSend SMS to: {phone}")
-        response = requests.post(
-            "https://rest.clicksend.com/v3/sms/send",
-            json={"messages": [{"to": phone, "body": message_body, "source": "NatashaMaes"}]},
-            auth=(CLICKSEND_USERNAME, CLICKSEND_API_KEY),
-            headers={"Content-Type": "application/json"}
-        )
+        print(f"🕵️ Sending Textbelt SMS to: {phone}")
+        response = requests.post('https://textbelt.com/text', {
+            'phone': phone,
+            'message': message_body,
+            'key': TEXTBELT_KEY,
+        })
         
-        print(f"📬 ClickSend Response: {response.status_code} - {response.text[:200]}")
+        resp_json = response.json()
+        print(f"📬 Textbelt Response: {resp_json}")
         
-        if response.status_code == 200 and response.json().get("response_code") == "SUCCESS":
+        if resp_json.get('success'):
             return f"SMS sent successfully to {phone}"
         else:
-            return f"SMS failed: {response.text[:200]}"
+            return f"SMS failed: {resp_json.get('error', 'Unknown error')}"
     except Exception as e:
-        print(f"❌ ClickSend Exception: {e}")
+        print(f"❌ Textbelt Exception: {e}")
         return f"SMS error: {e}"
 
 
