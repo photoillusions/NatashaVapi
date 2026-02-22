@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from flask import Flask, request, jsonify
 import json
 import calendar_service  # Import our new helper module
+import sheets_service     # Import our new sheets module
 
 app = Flask(__name__)
 
@@ -18,6 +19,7 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") # Where call reports go
 # 📱 CLICKSEND SMS API CREDENTIALS
 CLICKSEND_USERNAME = os.environ.get("CLICKSEND_USERNAME")  # Your ClickSend username (email)
 CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY")    # Your ClickSend API Key
+GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID")        # Your Google Sheet ID
 
 # --- THE BRAIN ---
 SYSTEM_PROMPT = """
@@ -86,8 +88,22 @@ def inbound_call():
                 server.login(EMAIL_SENDER, EMAIL_PASSWORD)
                 server.send_message(msg)
                 server.quit()
+
+            # 2. SHEETS LOGGING
+            if GOOGLE_SHEET_ID:
+                print(f"📊 Logging call to Google Sheet: {GOOGLE_SHEET_ID}")
+                customer = data.get('message', {}).get('call', {}).get('customer', {})
+                name = customer.get('name', 'Unknown')
+                phone = customer.get('number', 'N/A')
+                duration = data.get('message', {}).get('call', {}).get('duration', '0')
+                disposition = data.get('message', {}).get('call', {}).get('endedReason', 'N/A')
+                
+                sheets_service.log_call_to_sheet(
+                    GOOGLE_SHEET_ID, 
+                    [name, phone, summary, f"{duration}s", disposition]
+                )
         except Exception as e:
-            print(f"❌ Report Email Failed: {e}")
+            print(f"❌ Reporting Failed: {e}")
         return jsonify({"status": "OK"}), 200
 
     # 2. VAPI CONFIGURATION
