@@ -48,11 +48,11 @@ Do not just *say* you sent it. You must *execute* the tool.
 - 'frankford_map' (GPS)
 
 **📆 CALENDAR SCHEDULING:**
-- Use `check_availability` first to see if a slot is free.
+- Use `check_availability` first to see if a slot is free. Set `is_event=True` for event inquiries (Weddings, Sweet 16s, etc.) and `is_event=False` for VIP Tours.
 - **Tours:** 1-hour duration.
-- **Events:** 4-hour active time, but we block **6 hours total** (1 hour setup BEFORE + 4 hours event + 1 hour cleanup AFTER).
-- **Communication:** Explain this to the customer: "Our standard events are 4 hours, but we give you one full hour before to set up and one hour after for cleanup at no extra cost."
-- Use `book_appointment` to confirm the booking. Always ask for date, time, and email.
+- **Events:** 4-hour active time. We block **6 hours total** on the calendar (1 hour setup BEFORE + 4 hours event + 1 hour cleanup AFTER).
+- **Communication:** Explain this clearly: "Our standard event packages are for 4 hours of active party time, but we also include one full hour before for your setup and one hour after for cleanup at no extra cost."
+- Use `book_appointment` to confirm the booking after the customer agrees.
 """
 
 @app.route('/', methods=['GET'])
@@ -127,9 +127,10 @@ def inbound_call():
                                     "type": "object",
                                     "properties": {
                                         "start_time": {"type": "string", "description": "ISO 8601 start time (e.g. 2024-02-05T14:00:00-05:00)"},
-                                        "end_time": {"type": "string", "description": "ISO 8601 end time (e.g. 2024-02-05T15:00:00-05:00)"}
+                                        "end_time": {"type": "string", "description": "ISO 8601 end time (e.g. 2024-02-05T15:00:00-05:00)"},
+                                        "is_event": {"type": "boolean", "description": "True if this is a Wedding/Event (adds 1hr buffers), False if it's a VIP Tour."}
                                     },
-                                    "required": ["start_time", "end_time"]
+                                    "required": ["start_time", "end_time", "is_event"]
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
@@ -145,10 +146,11 @@ def inbound_call():
                                         "summary": {"type": "string", "description": "Title of event (e.g. 'VIP Tour for John Doe')"},
                                         "start_time": {"type": "string", "description": "ISO 8601 start time"},
                                         "end_time": {"type": "string", "description": "ISO 8601 end time"},
+                                        "is_event": {"type": "boolean", "description": "True for 4-hour events, False for 1-hour tours."},
                                         "attendee_email": {"type": "string", "description": "Guest email for invite"},
                                         "description": {"type": "string", "description": "Notes (phone number, location preference)"}
                                     },
-                                    "required": ["summary", "start_time", "end_time"]
+                                    "required": ["summary", "start_time", "end_time", "is_event"]
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
@@ -312,31 +314,36 @@ def calendar_tool_route():
     result = "Error: Unknown tool."
     
     if function_name == 'check_availability':
-        result = calendar_service.check_availability(
-            args.get('start_time'), 
-            args.get('end_time')
-        )
+        start_iso = args.get('start_time')
+        end_iso = args.get('end_time')
+        is_event = args.get('is_event', False)
+        
+        # Expand check range for events
+        if is_event:
+            try:
+                from datetime import datetime, timedelta
+                start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
+                start_iso = (start_dt - timedelta(hours=1)).isoformat()
+                end_iso = (end_dt + timedelta(hours=1)).isoformat()
+            except: pass
+
+        result = calendar_service.check_availability(start_iso, end_iso)
+        
     elif function_name == 'book_appointment':
         start_iso = args.get('start_time')
         end_iso = args.get('end_time')
-        summary = args.get('summary', '').lower()
+        is_event = args.get('is_event', False)
         
-        # Apply 1-hour buffer for EVENTS (Tours remain 1 hour as requested)
-        if "tour" not in summary:
+        # Apply 1-hour buffer for EVENTS
+        if is_event:
             try:
                 from datetime import datetime, timedelta
-                # ISO format usually like 2024-02-05T14:00:00-05:00
-                # We need to handle the offset carefully or use fromisoformat if Python >= 3.7
                 start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
                 end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
-                
-                # Add 1 hour BEFORE and 1 hour AFTER
-                actual_start = (start_dt - timedelta(hours=1)).isoformat()
-                actual_end = (end_dt + timedelta(hours=1)).isoformat()
-                
-                print(f"⏰ Event Booking: Adjusting {start_iso} to {actual_start} (Setup) and {end_iso} to {actual_end} (Cleanup)")
-                start_iso = actual_start
-                end_iso = actual_end
+                start_iso = (start_dt - timedelta(hours=1)).isoformat()
+                end_iso = (end_dt + timedelta(hours=1)).isoformat()
+                print(f"⏰ Event Booking: Adjusting {args.get('start_time')} to {start_iso} (Setup) and {args.get('end_time')} to {end_iso} (Cleanup)")
             except Exception as e:
                 print(f"Error adjusting event buffers: {e}")
 
