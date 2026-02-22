@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify
 import json
 import calendar_service  # Import our new helper module
 import sheets_service     # Import our new sheets module
+import crm_service        # Import our CRM module
 
 app = Flask(__name__)
 
@@ -114,7 +115,9 @@ def inbound_call():
                 "model": {
                     "provider": "openai",
                     "model": "gpt-4o-mini",
-                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT}
+                    ],
                     "tools": [
                         {
                             "type": "function",
@@ -178,6 +181,24 @@ def inbound_call():
                 "voice": {"provider": "11labs", "voiceId": "21m00Tcm4TlvDq8ikWAM"}
             }
         }
+
+        # 🚀 CUSTOMER HISTORY SYNC
+        try:
+            phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+            if not phone:
+                 phone = data.get('message', {}).get('customer', {}).get('number')
+            
+            if phone:
+                print(f"🔍 Looking up CRM history for: {phone}")
+                customer_data = crm_service.get_customer(phone)
+                if customer_data:
+                    history_text = crm_service.format_history_for_prompt(customer_data)
+                    # Inject history into the system prompt
+                    response["assistant"]["model"]["messages"][0]["content"] += history_text
+                    print(f"✅ CRM History injected for {phone}")
+        except Exception as e:
+            print(f"⚠️ CRM Lookup Failed: {e}")
+
         return jsonify(response), 200
 
     if message_type == 'tool-calls':
@@ -329,47 +350,51 @@ def calendar_tool_route():
 
     result = "Error: Unknown tool."
     
-    if function_name == 'check_availability':
-        start_iso = args.get('start_time')
-        end_iso = args.get('end_time')
-        is_event = args.get('is_event', False)
-        
-        # Expand check range for events
-        if is_event:
-            try:
-                from datetime import datetime, timedelta
-                start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
-                end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
-                start_iso = (start_dt - timedelta(hours=1)).isoformat()
-                end_iso = (end_dt + timedelta(hours=1)).isoformat()
-            except: pass
+    try:
+        if function_name == 'check_availability':
+            start_iso = args.get('start_time')
+            end_iso = args.get('end_time')
+            is_event = args.get('is_event', False)
+            
+            # Expand check range for events
+            if is_event:
+                try:
+                    from datetime import datetime, timedelta
+                    start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
+                    start_iso = (start_dt - timedelta(hours=1)).isoformat()
+                    end_iso = (end_dt + timedelta(hours=1)).isoformat()
+                except: pass
 
-        result = calendar_service.check_availability(start_iso, end_iso)
-        
-    elif function_name == 'book_appointment':
-        start_iso = args.get('start_time')
-        end_iso = args.get('end_time')
-        is_event = args.get('is_event', False)
-        
-        # Apply 1-hour buffer for EVENTS
-        if is_event:
-            try:
-                from datetime import datetime, timedelta
-                start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
-                end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
-                start_iso = (start_dt - timedelta(hours=1)).isoformat()
-                end_iso = (end_dt + timedelta(hours=1)).isoformat()
-                print(f"⏰ Event Booking: Adjusting {args.get('start_time')} to {start_iso} (Setup) and {args.get('end_time')} to {end_iso} (Cleanup)")
-            except Exception as e:
-                print(f"Error adjusting event buffers: {e}")
+            result = calendar_service.check_availability(start_iso, end_iso)
+            
+        elif function_name == 'book_appointment':
+            start_iso = args.get('start_time')
+            end_iso = args.get('end_time')
+            is_event = args.get('is_event', False)
+            
+            # Apply 1-hour buffer for EVENTS
+            if is_event:
+                try:
+                    from datetime import datetime, timedelta
+                    start_dt = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_iso.replace('Z', '+00:00'))
+                    start_iso = (start_dt - timedelta(hours=1)).isoformat()
+                    end_iso = (end_dt + timedelta(hours=1)).isoformat()
+                    print(f"⏰ Event Booking: Adjusting {args.get('start_time')} to {start_iso} (Setup) and {args.get('end_time')} to {end_iso} (Cleanup)")
+                except Exception as e:
+                    print(f"Error adjusting event buffers: {e}")
 
-        result = calendar_service.book_appointment(
-            summary=args.get('summary'),
-            start_time=start_iso,
-            end_time=end_iso,
-            attendee_email=args.get('attendee_email'),
-            description=args.get('description', '')
-        )
+            result = calendar_service.book_appointment(
+                summary=args.get('summary'),
+                start_time=start_iso,
+                end_time=end_iso,
+                attendee_email=args.get('attendee_email'),
+                description=args.get('description', '')
+            )
+    except Exception as e:
+        result = f"Error executing tool: {str(e)}"
+        print(f"❌ Tool Execution Error: {e}")
         
     return jsonify({
         "results": [{
