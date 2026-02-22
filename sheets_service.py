@@ -11,10 +11,10 @@ def get_sheets_service():
     try:
         creds = Credentials(
             token=None,
-            refresh_token=os.environ.get("GOOGLE_REFRESH_TOKEN"),
+            refresh_token=os.environ.get("GOOGLE_REFRESH_TOKEN2") or os.environ.get("GOOGLE_REFRESH_TOKEN"),
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=os.environ.get("GOOGLE_CLIENT_ID"),
-            client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+            client_id=os.environ.get("GOOGLE_CLIENT_ID2") or os.environ.get("GOOGLE_CLIENT_ID"),
+            client_secret=os.environ.get("GOOGLE_CLIENT_SECRET2") or os.environ.get("GOOGLE_CLIENT_SECRET"),
             scopes=SCOPES
         )
         return build('sheets', 'v4', credentials=creds)
