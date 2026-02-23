@@ -672,7 +672,7 @@ def calendar_tool_route():
                 from google.oauth2 import service_account
                 from googleapiclient.discovery import build
 
-                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
                 creds = service_account.Credentials.from_service_account_info(
                     sa_info, scopes=['https://www.googleapis.com/auth/calendar']
                 )
@@ -714,7 +714,7 @@ def calendar_tool_route():
                 from google.oauth2 import service_account
                 from googleapiclient.discovery import build
 
-                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
                 creds = service_account.Credentials.from_service_account_info(
                     sa_info, scopes=['https://www.googleapis.com/auth/calendar']
                 )
@@ -798,7 +798,7 @@ def calendar_tool_route():
                 from google.oauth2 import service_account
                 from googleapiclient.discovery import build
 
-                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
                 creds = service_account.Credentials.from_service_account_info(
                     sa_info, scopes=['https://www.googleapis.com/auth/calendar']
                 )
