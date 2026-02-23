@@ -686,9 +686,10 @@ def calendar_tool_route():
                     'start': {'dateTime': start_iso, 'timeZone': 'America/New_York'},
                     'end': {'dateTime': end_iso, 'timeZone': 'America/New_York'},
                 }
+                # Append email to description (can't add as attendee with service account)
                 attendee_email = args.get('attendee_email')
                 if attendee_email:
-                    event_body['attendees'] = [{'email': attendee_email}]
+                    event_body['description'] = (event_body.get('description', '') + f"\nEmail: {attendee_email}").strip()
 
                 created = service.events().insert(
                     calendarId=calendar_id,
