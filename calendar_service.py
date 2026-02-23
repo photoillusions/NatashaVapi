@@ -105,9 +105,7 @@ def book_appointment(summary, start_time_iso, end_time_iso, attendee_email=None,
         },
     }
     
-    # Add attendee if provided (sends them an invite)
-    if attendee_email:
-        event_body['attendees'] = [{'email': attendee_email}]
+    # Attendees removed: Only create calendar entry, no invites
 
     try:
         calendar_id = os.environ.get("CALENDAR_ID", "primary")
