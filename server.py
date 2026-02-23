@@ -122,6 +122,53 @@ Our professional design team transforms your venue with a fully custom themed se
 - If the customer adds the Custom Theme Room Design, mention: "If you have any inspiration photos for your theme, feel free to text two photos to this number. It's totally optional, but it helps our design team bring your vision to life."
 - This is optional — do not pressure them. Just a friendly suggestion.
 
+## ADD-ONS — DIVINE DINING CATERING
+We offer in-house catering through our Divine Dining service. After discussing the venue and event details, offer catering: "We also have our Divine Dining catering service if you'd like food taken care of. Would you like to hear about our menu packages?"
+
+### Catering Packages (per person pricing):
+
+**Simple & Elegant — $19.99/person**
+- Choice of 1 meat, 1 vegetable, 1 side
+- Note: Chicken Marsala, Salmon, and Stuffed Breast of Chicken are excluded from this tier
+- Includes professional service
+
+**Simply Classy — $26.99/person** ⭐ Most Popular
+- Choice of 2 meats, 1 vegetable, 1 side
+- Can choose one premium meat (Chicken Marsala or Stuffed Breast of Chicken)
+- Add Salmon: +$15.00/person
+- Elevated service with customized plating
+
+**Simply Divine — $34.99/person**
+- Choice of 3 meats, 2 vegetables, 2 sides
+- All premium selections available
+- Add Salmon: +$15.00/person
+- White-glove service
+
+**Wedding Package — $49.99/person** (Mae's Liberty Palace only)
+- Includes venue AND Simply Classy menu combined
+- Children under 12: $17.00/child (Chicken Fingers & Fries)
+
+### Available Menu Items:
+**Proteins:** Italian Herb Chicken, Honey Baked Ham, Succulent Roast Beef (w/gravy), Oven Roasted Turkey (w/gravy), Chicken Marsala, Grilled Salmon (+$15), Stuffed Breast of Chicken
+**Sides:** Garlic & Rosemary Roasted Potatoes, Rice Pilaf, Long Grain Wild Rice, Baked Ziti, Pasta Salad, Baked Macaroni and Cheese
+**Vegetables:** Green Beans, Collards, Broccoli, Mixed Vegetables, Steamed Broccoli, Brussel Sprouts, Grilled Asparagus
+
+### Custom Requests:
+If the customer wants something not on the menu, say: "Our chefs can customize the menu to fit your taste. Just let us know what you have in mind and we'll make it happen."
+
+### How to calculate catering totals:
+- Catering cost = per-person price × guest count
+- Add to venue price + any other add-ons (Theme Room $500) for TOTAL PACKAGE
+- 50% deposit is on the TOTAL PACKAGE (venue + catering + add-ons)
+
+### Example:
+- The Vault Saturday $3,795 + Simply Classy 75 guests ($26.99 × 75 = $2,024.25) + Theme Room $500 = **$6,319.25 total package**
+- 50% deposit = **$3,159.63**
+
+### Include in booking notes:
+- Add catering package name to the description: "CATERING: Simply Classy, 75 guests"
+- If salmon add-on: "CATERING: Simply Classy + Salmon, 75 guests"
+
 ## CONTRACTS — AUTO-GENERATED FOR EVERY BOOKING
 **A contract is automatically generated every time you book an appointment.** You don't need to do anything extra — the system handles it. Here's what happens:
 
@@ -531,6 +578,19 @@ def generate_contract_pdf(contract_data, filepath):
         if contract_data.get('theme_description'):
             event_table.append(["Theme", contract_data.get('theme_description')])
 
+    # Catering details
+    catering_pkg = contract_data.get('catering_package', '')
+    if catering_pkg and catering_pkg.lower() != 'none':
+        event_table.append(["Divine Dining Catering", catering_pkg])
+        catering_pp = contract_data.get('catering_price_pp', '')
+        if catering_pp:
+            event_table.append(["Catering Price/Person", f"${catering_pp}"])
+        if contract_data.get('catering_salmon'):
+            event_table.append(["Salmon Add-On", "+$15.00/person"])
+        children = contract_data.get('children_count', '')
+        if children and str(children) != '0':
+            event_table.append(["Children Under 12", f"{children} × $17.00/child"])
+
     t = Table(event_table, colWidths=[140, 340])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, -1), colors.Color(0.15, 0.15, 0.3)),
@@ -555,6 +615,23 @@ def generate_contract_pdf(contract_data, filepath):
     ]
     if contract_data.get('themed_setup'):
         finance_table.append(["Custom Theme Room Design", "$500.00"])
+    # Catering line items
+    if catering_pkg and catering_pkg.lower() != 'none':
+        catering_total = contract_data.get('catering_total', '')
+        guest_count = contract_data.get('guest_count', '')
+        catering_label = f"Divine Dining: {catering_pkg}"
+        if guest_count:
+            catering_label += f" ({guest_count} guests)"
+        finance_table.append([catering_label, f"${catering_total}" if catering_total else "See total"])
+        if contract_data.get('catering_salmon'):
+            finance_table.append(["  Salmon Add-On (+$15/pp)", "Included above"])
+        children = contract_data.get('children_count', '')
+        if children and str(children) != '0':
+            try:
+                kids_total = f"${float(children) * 17:.2f}"
+            except:
+                kids_total = f"{children} × $17"
+            finance_table.append([f"  Children's Menu ({children} kids)", kids_total])
     if early_bird:
         finance_table.append(["Early Bird Discount (50% OFF)", "Applied"])
     finance_table.extend([
@@ -870,7 +947,12 @@ def inbound_call():
                                         "themed_setup": {"type": "boolean", "description": "true if Custom Theme Room Design $500 add-on"},
                                         "theme_description": {"type": "string", "description": "Customer's theme if themed_setup is true"},
                                         "early_bird": {"type": "boolean", "description": "true if Early Bird 50% off applied"},
-                                        "confirmation_number": {"type": "string", "description": "Payment confirmation if already paid"}
+                                        "confirmation_number": {"type": "string", "description": "Payment confirmation if already paid"},
+                                        "catering_package": {"type": "string", "description": "Divine Dining package: 'Simple & Elegant', 'Simply Classy', 'Simply Divine', 'Wedding Package', or 'None'"},
+                                        "catering_price_pp": {"type": "string", "description": "Per-person catering price e.g. '26.99'"},
+                                        "catering_total": {"type": "string", "description": "Total catering cost (price_pp × guest_count)"},
+                                        "catering_salmon": {"type": "boolean", "description": "true if salmon add-on (+$15/person)"},
+                                        "children_count": {"type": "string", "description": "Number of children under 12 for kids menu ($17/child)"}
                                     },
                                     "required": ["summary", "start_time", "end_time", "is_event", "customer_name", "event_type", "venue", "total_price", "deposit_amount"]
                                 }
@@ -1156,6 +1238,11 @@ def calendar_tool_route():
                         'status': 'CONFIRMED' if 'CONFIRMED' in summary.upper() else 'PENCILED',
                         'confirmation_number': args.get('confirmation_number', ''),
                         'payments': [],
+                        'catering_package': args.get('catering_package', ''),
+                        'catering_price_pp': args.get('catering_price_pp', ''),
+                        'catering_total': args.get('catering_total', ''),
+                        'catering_salmon': args.get('catering_salmon', False),
+                        'children_count': args.get('children_count', ''),
                     }
                     # Extract phone from caller ID if not provided
                     if not contract_data['customer_phone']:
@@ -1294,6 +1381,11 @@ def calendar_tool_route():
                                 'amount': payment_amount,
                                 'confirmation': confirmation_number
                             }],
+                            'catering_package': args.get('catering_package', ''),
+                            'catering_price_pp': args.get('catering_price_pp', ''),
+                            'catering_total': args.get('catering_total', ''),
+                            'catering_salmon': args.get('catering_salmon', False),
+                            'children_count': args.get('children_count', ''),
                         }
                         contract_result = handle_contract(contract_data, is_update=True)
                         result += f" | Contract: {contract_result}"
@@ -1804,6 +1896,414 @@ def send_sms_tool():
     data = request.json or {}
     tool_call_id, _, _ = extract_tool_call(data)
     return jsonify({"results": [{"toolCallId": tool_call_id, "result": "SMS disabled. Use email instead."}]}), 200
+
+# =====================================================
+# JESSICA ONLINE — CUSTOMER PORTAL API
+# =====================================================
+
+# CORS support for frontend
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get('Origin', '')
+    allowed_origins = [
+        'https://natashamaesenterprise.netlify.app',
+        'http://localhost:3000',
+        'http://localhost:5173',
+    ]
+    if origin in allowed_origins or origin.endswith('.netlify.app'):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    return response
+
+@app.route('/api/menu', methods=['GET', 'OPTIONS'])
+def get_menu():
+    """Return available add-on items for the shopping cart."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    menu = {
+        "catering": [
+            {
+                "id": "catering-simple",
+                "name": "Simple & Elegant",
+                "description": "Choice of 1 meat, 1 vegetable, 1 side. Professional service included.",
+                "note": "Excludes Chicken Marsala, Salmon, Stuffed Breast of Chicken",
+                "price_per_person": 19.99,
+                "category": "catering",
+                "type": "per_person"
+            },
+            {
+                "id": "catering-classy",
+                "name": "Simply Classy",
+                "description": "Choice of 2 meats, 1 vegetable, 1 side. Elevated service with customized plating.",
+                "note": "Most Popular — includes one premium meat option",
+                "price_per_person": 26.99,
+                "category": "catering",
+                "type": "per_person",
+                "popular": True
+            },
+            {
+                "id": "catering-divine",
+                "name": "Simply Divine",
+                "description": "Choice of 3 meats, 2 vegetables, 2 sides. White-glove service.",
+                "note": "All premium selections available",
+                "price_per_person": 34.99,
+                "category": "catering",
+                "type": "per_person"
+            },
+            {
+                "id": "catering-wedding",
+                "name": "Wedding Package",
+                "description": "Includes venue AND Simply Classy menu combined. Mae's Liberty Palace only.",
+                "price_per_person": 49.99,
+                "category": "catering",
+                "type": "per_person"
+            },
+            {
+                "id": "catering-kids",
+                "name": "Children's Menu (Under 12)",
+                "description": "Chicken Fingers & Fries",
+                "price_per_person": 17.00,
+                "category": "catering",
+                "type": "per_person"
+            },
+            {
+                "id": "catering-salmon",
+                "name": "Salmon Add-On",
+                "description": "Add Grilled Salmon to Simply Classy or Simply Divine package",
+                "price_per_person": 15.00,
+                "category": "catering",
+                "type": "per_person",
+                "is_addon": True
+            }
+        ],
+        "addons": [
+            {
+                "id": "theme-room",
+                "name": "Custom Theme Room Design",
+                "description": "Professional design team transforms your venue with fully custom themed setup — decor, table settings, backdrops, and styling.",
+                "price": 500.00,
+                "category": "addon",
+                "type": "flat"
+            }
+        ],
+        "proteins": ["Italian Herb Chicken", "Honey Baked Ham", "Succulent Roast Beef (w/gravy)", "Oven Roasted Turkey (w/gravy)", "Chicken Marsala", "Grilled Salmon (+$15)", "Stuffed Breast of Chicken"],
+        "sides": ["Garlic & Rosemary Roasted Potatoes", "Rice Pilaf", "Long Grain Wild Rice", "Baked Ziti", "Pasta Salad", "Baked Macaroni and Cheese"],
+        "vegetables": ["Green Beans", "Collards", "Broccoli", "Mixed Vegetables", "Steamed Broccoli", "Brussel Sprouts", "Grilled Asparagus"]
+    }
+    return jsonify(menu), 200
+
+@app.route('/api/lookup-contract', methods=['POST', 'OPTIONS'])
+def lookup_contract():
+    """Look up a customer's existing contract by email or phone."""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    data = request.json or {}
+    email = data.get('email', '').strip().lower()
+    phone = data.get('phone', '').strip()
+
+    if not email and not phone:
+        return jsonify({"error": "Please provide email or phone number"}), 400
+
+    print(f"CONTRACT LOOKUP: email={email} phone={phone}")
+
+    try:
+        # Search CRM for customer
+        customer = None
+        if phone:
+            # Normalize phone
+            if not phone.startswith('+'):
+                phone = '+1' + phone.replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+            customer = crm_service.get_customer(phone)
+
+        if not customer and email:
+            # Search CRM by email via Supabase
+            try:
+                if crm_service.supabase:
+                    resp = crm_service.supabase.table("customers").select("*").eq("email", email).execute()
+                    if resp.data:
+                        customer = resp.data[0]
+                        phone = customer.get('phone', '')
+                        if phone and not phone.startswith('+'):
+                            phone = '+' + phone
+            except Exception as se:
+                print(f"CONTRACT LOOKUP email search error: {se}")
+
+        if not customer:
+            return jsonify({"found": False, "message": "No existing booking found. You can still add items to your cart and check out with a card."}), 200
+
+        # Search calendar for their event
+        event_info = None
+        try:
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build
+
+            sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
+            creds = service_account.Credentials.from_service_account_info(
+                sa_info, scopes=['https://www.googleapis.com/auth/calendar']
+            )
+            cal_service = build('calendar', 'v3', credentials=creds)
+            calendar_id = os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
+            now = datetime.utcnow().isoformat() + 'Z'
+            name = customer.get('name', '')
+            events_result = cal_service.events().list(
+                calendarId=calendar_id,
+                timeMin=now,
+                maxResults=10,
+                singleEvents=True,
+                orderBy='startTime',
+                q=name
+            ).execute()
+            events = events_result.get('items', [])
+
+            if events:
+                evt = events[0]
+                event_info = {
+                    "summary": evt.get('summary', ''),
+                    "date": evt.get('start', {}).get('dateTime', '')[:10],
+                    "time": evt.get('start', {}).get('dateTime', ''),
+                    "venue": evt.get('location', ''),
+                    "description": evt.get('description', ''),
+                    "event_id": evt.get('id', ''),
+                    "status": "CONFIRMED" if "CONFIRMED" in evt.get('summary', '') else "PENCILED",
+                }
+        except Exception as ce:
+            print(f"CONTRACT LOOKUP calendar error: {ce}")
+
+        result = {
+            "found": True,
+            "customer": {
+                "name": customer.get('name', ''),
+                "email": customer.get('email', ''),
+                "phone": phone,
+                "status": customer.get('status', ''),
+                "confirmation_number": customer.get('confirmation_number', ''),
+            },
+            "event": event_info,
+        }
+        print(f"CONTRACT LOOKUP: Found {customer.get('name')} - {event_info.get('summary') if event_info else 'no event'}")
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"CONTRACT LOOKUP ERROR: {traceback.format_exc()}")
+        return jsonify({"error": f"Lookup failed: {str(e)}"}), 500
+
+@app.route('/api/add-to-package', methods=['POST', 'OPTIONS'])
+def add_to_package():
+    """Add shopping cart items to an existing event contract."""
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    data = request.json or {}
+    email = data.get('email', '').strip()
+    phone = data.get('phone', '').strip()
+    cart_items = data.get('cart_items', [])
+    cart_total = data.get('cart_total', 0)
+    guest_count = data.get('guest_count', 0)
+
+    if not cart_items:
+        return jsonify({"error": "Cart is empty"}), 400
+    if not email and not phone:
+        return jsonify({"error": "Please provide email or phone"}), 400
+
+    print(f"ADD TO PACKAGE: {email or phone} | {len(cart_items)} items | ${cart_total}")
+
+    try:
+        # Normalize phone
+        if phone and not phone.startswith('+'):
+            phone = '+1' + phone.replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+
+        # Find customer
+        customer = None
+        if phone:
+            customer = crm_service.get_customer(phone)
+        if not customer and email:
+            try:
+                if crm_service.supabase:
+                    resp = crm_service.supabase.table("customers").select("*").eq("email", email.lower()).execute()
+                    if resp.data:
+                        customer = resp.data[0]
+                        phone = customer.get('phone', '')
+                        if phone and not phone.startswith('+'):
+                            phone = '+' + phone
+            except Exception as se:
+                print(f"ADD TO PACKAGE email search error: {se}")
+
+        if not customer:
+            return jsonify({"error": "No existing booking found for this email/phone"}), 404
+
+        # Find calendar event
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+
+        sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
+        creds = service_account.Credentials.from_service_account_info(
+            sa_info, scopes=[
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/drive',
+                'https://www.googleapis.com/auth/drive.file'
+            ]
+        )
+        cal_service = build('calendar', 'v3', credentials=creds)
+        calendar_id = os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
+        now = datetime.utcnow().isoformat() + 'Z'
+        name = customer.get('name', '')
+        events_result = cal_service.events().list(
+            calendarId=calendar_id,
+            timeMin=now,
+            maxResults=10,
+            singleEvents=True,
+            orderBy='startTime',
+            q=name
+        ).execute()
+        events = events_result.get('items', [])
+
+        if not events:
+            return jsonify({"error": f"No upcoming event found for {name}"}), 404
+
+        event = events[0]
+        existing_desc = event.get('description', '')
+
+        # Build add-on note for calendar event
+        addon_lines = [f"\n--- PACKAGE UPDATE ({datetime.now().strftime('%m/%d/%Y %I:%M %p')}) ---"]
+        addon_lines.append(f"Added via JessicaOnline:")
+
+        # Parse cart items
+        catering_package = ''
+        catering_price_pp = ''
+        catering_total_val = 0
+        has_salmon = False
+        children_count = 0
+        has_theme = False
+        theme_desc = ''
+
+        for item in cart_items:
+            item_id = item.get('id', '')
+            item_name = item.get('name', '')
+            qty = item.get('quantity', 1)
+            price = item.get('price', 0)
+            line_total = item.get('line_total', price * qty)
+
+            addon_lines.append(f"  • {item_name} — ${line_total:.2f}")
+
+            if item_id.startswith('catering-') and item_id not in ('catering-salmon', 'catering-kids'):
+                catering_package = item_name
+                catering_price_pp = str(item.get('price_per_person', price))
+                catering_total_val = line_total
+            elif item_id == 'catering-salmon':
+                has_salmon = True
+            elif item_id == 'catering-kids':
+                children_count = qty
+            elif item_id == 'theme-room':
+                has_theme = True
+                theme_desc = item.get('theme_description', '')
+
+        addon_lines.append(f"  ADDED TOTAL: ${cart_total:.2f}")
+
+        # Update calendar event description
+        new_desc = existing_desc + '\n'.join(addon_lines)
+        event['description'] = new_desc
+
+        updated_event = cal_service.events().update(
+            calendarId=calendar_id,
+            eventId=event['id'],
+            body=event
+        ).execute()
+        print(f"CALENDAR UPDATED with add-ons for {name}")
+
+        # Calculate new totals
+        # Try to extract existing total from description or CRM
+        existing_total = 0
+        try:
+            # Look for previous total in description
+            for line in existing_desc.split('\n'):
+                if 'TOTAL PACKAGE' in line.upper() or 'total_price' in line.lower():
+                    import re
+                    nums = re.findall(r'\$?([\d,]+\.?\d*)', line)
+                    if nums:
+                        existing_total = float(nums[-1].replace(',', ''))
+                        break
+        except:
+            pass
+
+        # Use CRM notes if no total found
+        if not existing_total:
+            existing_total = float(customer.get('total_price', '0') or '0')
+
+        new_total = existing_total + cart_total
+        new_deposit = new_total / 2
+        total_paid = float(customer.get('last_payment_amount', '0') or '0')
+        new_balance = new_total - total_paid
+
+        # Build contract data
+        event_start = event.get('start', {}).get('dateTime', '')
+        summary_parts = event.get('summary', '').split(' - ')
+        event_type = summary_parts[1] if len(summary_parts) > 2 else 'Event'
+        status = 'CONFIRMED' if 'CONFIRMED' in event.get('summary', '') else 'PENCILED'
+
+        contract_data = {
+            'customer_name': name,
+            'customer_email': customer.get('email', email),
+            'customer_phone': phone,
+            'event_type': event_type.strip(),
+            'venue': event.get('location', ''),
+            'event_date': event_start[:10] if event_start else '',
+            'event_time': '',
+            'guest_count': str(guest_count) if guest_count else customer.get('guest_count', ''),
+            'total_price': f"{new_total:.2f}",
+            'venue_price': f"{existing_total:.2f}",
+            'deposit_amount': f"{new_deposit:.2f}",
+            'total_paid': f"{total_paid:.2f}",
+            'balance_due': f"{new_balance:.2f}",
+            'themed_setup': has_theme or 'THEMED' in existing_desc.upper(),
+            'theme_description': theme_desc,
+            'early_bird': 'early bird' in existing_desc.lower(),
+            'status': status,
+            'confirmation_number': customer.get('confirmation_number', ''),
+            'catering_package': catering_package,
+            'catering_price_pp': catering_price_pp,
+            'catering_total': f"{catering_total_val:.2f}" if catering_total_val else '',
+            'catering_salmon': has_salmon,
+            'children_count': str(children_count) if children_count else '',
+            'payments': [],
+        }
+
+        # Add existing payment if any
+        if total_paid > 0:
+            contract_data['payments'].append({
+                'date': customer.get('last_payment_date', ''),
+                'amount': f"{total_paid:.2f}",
+                'confirmation': customer.get('confirmation_number', '')
+            })
+
+        # Generate updated contract, email, store in Drive
+        contract_result = handle_contract(contract_data, is_update=True)
+
+        # Update CRM
+        crm_service.upsert_customer(phone, {
+            "name": name,
+            "email": customer.get('email', email),
+            "total_price": f"{new_total:.2f}",
+            "notes": f"Package updated via JessicaOnline. Added ${cart_total:.2f} in add-ons. New total: ${new_total:.2f}",
+        })
+
+        print(f"ADD TO PACKAGE: Complete for {name} | New total: ${new_total:.2f}")
+
+        return jsonify({
+            "success": True,
+            "message": f"Items added to your event package! An updated contract has been sent to {customer.get('email', email)}.",
+            "new_total": f"{new_total:.2f}",
+            "new_balance": f"{new_balance:.2f}",
+            "new_deposit": f"{new_deposit:.2f}",
+            "contract": contract_result,
+        }), 200
+
+    except Exception as e:
+        print(f"ADD TO PACKAGE ERROR: {traceback.format_exc()}")
+        return jsonify({"error": f"Failed to update package: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
