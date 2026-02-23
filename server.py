@@ -60,7 +60,7 @@ Do not just *say* you sent it. You must *execute* the tool.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (ClickSend SMS Edition v2)"
+    return "Natasha Mae's Server Online (v2.2 - Sheets + CRM Sync Active)"
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
@@ -338,13 +338,20 @@ def calendar_tool_route():
     args = {}
     
     try:
-        # Standard VAPI tool call structure
+        # 1. Try 'toolCalls' (standard)
         tool_calls = data.get('message', {}).get('toolCalls', [])
+        if not tool_calls:
+            # 2. Try 'toolCallList' (fallback)
+            tool_calls = data.get('message', {}).get('toolCallList', [])
+        
         if tool_calls:
             tool_call_id = tool_calls[0].get('id')
             function = tool_calls[0].get('function', {})
             function_name = function.get('name')
             args = function.get('arguments', {})
+            if not function_name: # Handle nested function object if needed
+                 function_name = tool_calls[0].get('name')
+                 args = tool_calls[0].get('arguments', {})
     except Exception as e:
         print(f"Error parsing tool data: {e}")
 
