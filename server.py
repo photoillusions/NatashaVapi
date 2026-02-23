@@ -60,7 +60,7 @@ Do not just *say* you sent it. You must *execute* the tool.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (v2.2.1 - Sync & Sheets ACTIVE)"
+    return "Natasha Mae's Server Online (v2.2.1-DEPLOY-VERIFY)"
 
 @app.route('/debug', methods=['GET'])
 def debug_status():
