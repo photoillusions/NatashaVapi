@@ -104,15 +104,23 @@ When a customer asks about packages or pricing, give them a quick overview:
 **ALWAYS collect email after penciling in a date OR when a customer wants package info.**
 You MUST actually call `send_info_email` — NEVER skip it or make excuses.
 
-**You already have the caller's phone number from Caller ID — do NOT ask for it.**
+**The caller's phone number is captured automatically from Caller ID on every tool call — do NOT ask for it.**
+
+## CUSTOMER LOOKUP — lookup_customer
+**IMPORTANT: After getting the customer's name, call `lookup_customer` FIRST.**
+- The server automatically extracts the caller's phone number from caller ID
+- It searches the CRM and returns any previous history (name, email, venue, payments, status)
+- If RETURNING CUSTOMER: Greet them warmly, reference their history, don't make them repeat info
+- If NEW CUSTOMER: Proceed normally with the booking flow
 
 ### How to collect email (ACCURACY IS CRITICAL):
 1. Ask for their **name**
-2. Ask: "What's your email address? Please spell it out for me letter by letter so I get it exactly right."
-3. Repeat the full email back to them: "So that's J-O-H-N at G-M-A-I-L dot com, is that correct?"
-4. If they just say it fast, ask: "I want to make sure I have that perfect — could you spell that out for me?"
-5. **You already have their phone number from caller ID. Do NOT ask for it again.**
-6. **IMMEDIATELY call `send_info_email`** — do NOT skip this step, do NOT say "I'll have someone email you", do NOT make excuses. YOU send it right now.
+2. Call `lookup_customer(customer_name)` — if they have an email on file, confirm it: "I have [email] on file — is that still correct?"
+3. If no email on file, ask: "What's your email address? Please spell it out for me letter by letter so I get it exactly right."
+4. Repeat the full email back to them: "So that's J-O-H-N at G-M-A-I-L dot com, is that correct?"
+5. If they just say it fast, ask: "I want to make sure I have that perfect — could you spell that out for me?"
+6. **Do NOT ask for their phone number — it's captured automatically from caller ID.**
+7. **IMMEDIATELY call `send_info_email`** — do NOT skip this step, do NOT say "I'll have someone email you", do NOT make excuses. YOU send it right now.
 
 ### When to send email:
 - Customer asks about packages or pricing details → collect name + spelled email → `send_info_email`
@@ -388,6 +396,21 @@ def inbound_call():
                     "model": "gpt-5-mini",
                     "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
                     "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "lookup_customer",
+                                "description": "Look up a customer in the CRM using the caller's phone number (extracted automatically from caller ID). Call this FIRST after getting the customer's name to check if they are a returning customer.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "customer_name": {"type": "string", "description": "The customer's name (for logging)"}
+                                    },
+                                    "required": ["customer_name"]
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/lookup-customer-tool"}
+                        },
                         {
                             "type": "function",
                             "function": {
@@ -872,6 +895,69 @@ def calendar_tool_route():
         print(f"Calendar Error: {e}")
 
     print(f"Calendar result: {result}")
+    return jsonify({"results": [{"toolCallId": tool_call_id, "result": result}]}), 200
+
+# =====================================================
+# CUSTOMER LOOKUP TOOL (CRM + Caller ID)
+# =====================================================
+@app.route('/lookup-customer-tool', methods=['POST'])
+def lookup_customer_tool_route():
+    data = request.json or {}
+    tool_call_id, function_name, args = extract_tool_call(data)
+    result = "No customer history found. This appears to be a new customer."
+
+    try:
+        # Extract phone from VAPI call data (always present in tool calls)
+        phone = None
+        try:
+            phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+        except:
+            pass
+        if not phone:
+            try:
+                phone = data.get('message', {}).get('customer', {}).get('number')
+            except:
+                pass
+
+        if phone:
+            print(f"LOOKUP: Phone from caller ID: {phone}")
+            customer_data = crm_service.get_customer(phone)
+            if customer_data:
+                print(f"LOOKUP: Returning customer found for {phone}")
+                # Build a summary for Jessica to use
+                info_parts = [f"RETURNING CUSTOMER FOUND — Phone: {phone}"]
+                if customer_data.get('name'):
+                    info_parts.append(f"Name: {customer_data['name']}")
+                if customer_data.get('email'):
+                    info_parts.append(f"Email: {customer_data['email']}")
+                if customer_data.get('venue'):
+                    info_parts.append(f"Venue: {customer_data['venue']}")
+                if customer_data.get('event_type'):
+                    info_parts.append(f"Event Type: {customer_data['event_type']}")
+                if customer_data.get('event_date'):
+                    info_parts.append(f"Event Date: {customer_data['event_date']}")
+                if customer_data.get('last_payment_amount'):
+                    info_parts.append(f"Last Payment: ${customer_data['last_payment_amount']}")
+                if customer_data.get('last_payment_date'):
+                    info_parts.append(f"Payment Date: {customer_data['last_payment_date']}")
+                if customer_data.get('confirmation_number'):
+                    info_parts.append(f"Confirmation: {customer_data['confirmation_number']}")
+                if customer_data.get('status'):
+                    info_parts.append(f"Status: {customer_data['status']}")
+                if customer_data.get('notes'):
+                    info_parts.append(f"Notes: {customer_data['notes']}")
+                result = " | ".join(info_parts)
+            else:
+                print(f"LOOKUP: New customer {phone}")
+                result = f"NEW CUSTOMER — Phone: {phone}. No previous history."
+        else:
+            print("LOOKUP: No phone number available in call data")
+            result = "Could not determine caller's phone number."
+
+    except Exception as e:
+        print(f"Lookup Error: {traceback.format_exc()}")
+        result = f"Lookup error: {str(e)}"
+
     return jsonify({"results": [{"toolCallId": tool_call_id, "result": result}]}), 200
 
 # =====================================================
