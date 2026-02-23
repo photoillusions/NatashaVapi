@@ -60,7 +60,7 @@ Do not just *say* you sent it. You must *execute* the tool.
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Natasha Mae's Server Online (v2.2.1-DEPLOY-VERIFY)"
+    return "Natasha Mae's Server Online (v2.2.1-FINAL-POS-FIX)"
 
 @app.route('/debug', methods=['GET'])
 def debug_status():
@@ -394,10 +394,11 @@ def calendar_tool_route():
             result = calendar_service.check_availability(start_iso, end_iso)
             
         elif function_name == 'book_appointment':
-            start_iso = args.get('start_time')
-            end_iso = args.get('end_time')
+            # Map start_time/end_time to start_time_iso/end_time_iso for calendar_service compatibility
+            start_iso = args.get('start_time') or args.get('start_time_iso')
+            end_iso = args.get('end_time') or args.get('end_time_iso')
             is_event = args.get('is_event', False)
-            
+
             # Apply 1-hour buffer for EVENTS
             if is_event:
                 try:
@@ -410,12 +411,13 @@ def calendar_tool_route():
                 except Exception as e:
                     print(f"Error adjusting event buffers: {e}")
 
+            print(f"🚀 Calling book_appointment with: {args.get('summary')}, {start_iso}, {end_iso}, {args.get('attendee_email')}")
             result = calendar_service.book_appointment(
-                summary=args.get('summary'),
-                start_time=start_iso,
-                end_time=end_iso,
-                attendee_email=args.get('attendee_email'),
-                description=args.get('description', '')
+                args.get('summary'),
+                start_iso,
+                end_iso,
+                args.get('attendee_email'),
+                args.get('description', '')
             )
     except Exception as e:
         result = f"Error executing tool: {str(e)}"
