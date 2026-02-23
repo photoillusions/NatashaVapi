@@ -62,6 +62,24 @@ Do not just *say* you sent it. You must *execute* the tool.
 def home():
     return "Natasha Mae's Server Online (v2.2 - Sheets + CRM Sync Active)"
 
+@app.route('/debug', methods=['GET'])
+def debug_status():
+    """Health check for environment variables (masked for safety)"""
+    def mask(val):
+        if not val or len(val) < 8: return "❌ MISSING"
+        return f"{val[:4]}...{val[-4:]} (✅ SET)"
+        
+    status = {
+        "EMAIL": mask(EMAIL_SENDER),
+        "SMS": mask(CLICKSEND_API_KEY),
+        "SHEETS": mask(GOOGLE_SHEET_ID),
+        "SUPABASE_URL": mask(os.environ.get("SUPABASE_URL")),
+        "SUPABASE_KEY": mask(os.environ.get("SUPABASE_KEY")),
+        "GOOGLE_REFRESH_TOKEN2": mask(os.environ.get("GOOGLE_REFRESH_TOKEN2")),
+        "GOOGLE_REFRESH_TOKEN": mask(os.environ.get("GOOGLE_REFRESH_TOKEN"))
+    }
+    return jsonify(status), 200
+
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
     data = request.json or {}
