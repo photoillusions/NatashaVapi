@@ -95,16 +95,29 @@ When a customer asks about packages or pricing, give them a quick overview:
 - Perfect for intimate gatherings under 100 guests
 
 **All Venues Include:**
-- 1-hour setup before and 1-hour cleanup after at no extra cost
+- 4-hour event booking with 1-hour setup before and 1-hour cleanup after (6-hour total calendar block)
 - Security guard required for all events ($35/hr)
 - 50% deposit required to lock your date
 - Balance due 10 days before event
 
-If the customer wants MORE detailed information (full brochure, menu options, add-ons), collect their info and email it:
+## EMAIL COLLECTION — CRITICAL RULES
+**ALWAYS collect email after penciling in a date OR when a customer wants package info.**
+You MUST actually call `send_info_email` — NEVER skip it or make excuses.
+
+**You already have the caller's phone number from Caller ID — do NOT ask for it.**
+
+### How to collect email (ACCURACY IS CRITICAL):
 1. Ask for their **name**
-2. Ask for their **email address**
-3. Ask for their **phone number**
-4. Call `send_info_email` to email them the full package details
+2. Ask: "What's your email address? Please spell it out for me letter by letter so I get it exactly right."
+3. Repeat the full email back to them: "So that's J-O-H-N at G-M-A-I-L dot com, is that correct?"
+4. If they just say it fast, ask: "I want to make sure I have that perfect — could you spell that out for me?"
+5. **You already have their phone number from caller ID. Do NOT ask for it again.**
+6. **IMMEDIATELY call `send_info_email`** — do NOT skip this step, do NOT say "I'll have someone email you", do NOT make excuses. YOU send it right now.
+
+### When to send email:
+- Customer asks about packages or pricing details → collect name + spelled email → `send_info_email`
+- After penciling in a date → collect name + spelled email → `send_info_email`
+- Customer asks to be emailed anything → collect name + spelled email → `send_info_email`
 
 ## CALENDAR — PENCIL IN vs LOCK
 
@@ -116,8 +129,11 @@ If the customer wants MORE detailed information (full brochure, menu options, ad
 1. Call `check_availability(start_time, end_time, is_event)` to see if the date is free
 2. If available and customer wants to proceed:
    - Ask: "Would you like to go ahead and secure this date with a deposit, or would you like me to pencil you in while you finalize your plans?"
-   - **If they want to pencil in:** Get their name, call `book_appointment` with summary starting with "PENCILED - ". Tell them: "I've penciled you in for [date]. Just keep in mind, the date isn't officially locked until we receive the 50% deposit."
-   - **If they want to lock/secure it:** Collect payment via `process_payment`, THEN call `book_appointment` with summary starting with "CONFIRMED - ". Then call `send_booking_email`.
+   - **If they want to pencil in:** Get their name, collect their email (SPELL IT OUT — you already have their phone from caller ID), call `book_appointment` with summary starting with "PENCILED - ". Then IMMEDIATELY call `send_info_email` to send them package details. Tell them: "I've penciled you in for [date] and I'm sending you an email right now with all the details. Just keep in mind, the date isn't officially locked until we receive the 50% deposit."
+   - **If they want to lock/secure it:** Collect payment via `process_payment`. Then:
+     - If they had a PENCILED booking: call `update_booking` to change it to CONFIRMED (updates calendar + CRM automatically)
+     - If this is a brand new booking (no pencil): call `book_appointment` with "CONFIRMED - " prefix
+     - Either way, call `send_booking_email` to send confirmation
 
 ### Time Formatting:
 - ALL times: ISO 8601 with Eastern timezone
@@ -125,18 +141,73 @@ If the customer wants MORE detailed information (full brochure, menu options, ad
 - November-March (EST): -05:00
 - Assume year 2026 unless stated otherwise
 
-### Event Durations (calculate end_time):
-- **VIP Tours:** 1 hour. is_event=false.
-- **Corporate Events:** 4 hours. is_event=true.
-- **Weddings, Sweet 16s, Repasts, Birthday Parties:** 6 hours. is_event=true.
+### Event Durations (calculate end_time from event start):
+- **VIP Tours:** 1 hour. is_event=false. No setup/cleanup buffer.
+- **All Events (Weddings, Sweet 16s, Repasts, Birthday Parties, Corporate):** 4-hour event booking. is_event=true.
+  - The server AUTOMATICALLY adds 1-hour setup BEFORE and 1-hour cleanup AFTER.
+  - So a 4-hour event = 6-hour total calendar block. You do NOT need to add the buffers yourself.
+  - Tell the customer: "Your event is 4 hours, and that includes setup before and cleanup after at no extra cost."
+  - Calculate end_time as start_time + 4 hours ONLY. The server handles the rest.
 
 ### Examples:
-Pencil in a wedding June 15 at 6 PM:
-→ check_availability(start_time: "2026-06-15T18:00:00-04:00", end_time: "2026-06-16T00:00:00-04:00", is_event: true)
-→ book_appointment(summary: "PENCILED - Wedding - The Vault - Sarah Johnson", start_time: "2026-06-15T18:00:00-04:00", end_time: "2026-06-16T00:00:00-04:00", is_event: true)
+Pencil in a wedding June 15 at 6 PM (4hr event = 6PM to 10PM):
+→ check_availability(start_time: "2026-06-15T18:00:00-04:00", end_time: "2026-06-15T22:00:00-04:00", is_event: true)
+→ Server checks 5PM-11PM (adds 1hr buffer each side)
+→ book_appointment(summary: "PENCILED - Wedding - The Vault - Sarah Johnson", start_time: "2026-06-15T18:00:00-04:00", end_time: "2026-06-15T22:00:00-04:00", is_event: true)
+→ Server books 5PM-11PM on calendar (6hr block)
+
+Book a tour Wednesday at 2 PM (1hr, no buffer):
+→ check_availability(start_time: "2026-03-04T14:00:00-05:00", end_time: "2026-03-04T15:00:00-05:00", is_event: false)
+→ book_appointment(summary: "TOUR - The Vault - Sarah Johnson", start_time: "2026-03-04T14:00:00-05:00", end_time: "2026-03-04T15:00:00-05:00", is_event: false, description: "Phone: +18565551234, interested in wedding venue")
 
 Lock a wedding after payment:
-→ book_appointment(summary: "CONFIRMED - Wedding - The Vault - Sarah Johnson", start_time: "2026-06-15T18:00:00-04:00", end_time: "2026-06-16T00:00:00-04:00", is_event: true)
+→ process_payment(amount: "1897.50", ...)
+→ update_booking(customer_name: "Sarah Johnson", payment_amount: "1897.50", confirmation_number: "NME-ABC12345", customer_phone: "+18565551234", customer_email: "sarah@email.com")
+→ Calendar: PENCILED → CONFIRMED automatically, payment details added to event description
+→ send_booking_email(...)
+
+## TOURS — VIP VENUE TOURS
+Tours are 1-hour visits for customers to see the venue in person. No deposit required.
+
+### Tour Booking Flow:
+1. Ask which venue they'd like to tour
+2. Ask what date and time works for them
+3. Call `check_availability(start_time, end_time, is_event: false)` — tours are 1 hour, NO buffer
+4. If available, get their name (you already have phone from caller ID)
+5. Call `book_appointment` with summary: "TOUR - [Venue] - [Customer Name]"
+   - Include their phone number and any notes in the description field
+   - is_event: false (no setup/cleanup buffer)
+6. Confirm: "You're all set for a tour of [venue] on [date] at [time]. We look forward to seeing you!"
+7. Collect their email (SPELL IT OUT) and call `send_info_email` so they have venue info before the tour
+
+### Tour Notes:
+- Tours are FREE — no payment needed
+- Use "TOUR - " prefix (not PENCILED or CONFIRMED)
+- Tours do NOT get 1-hour setup/cleanup buffers
+- Include phone number in the description field for follow-up
+
+## RESCHEDULING
+When a customer calls to reschedule an existing booking (tour OR event):
+
+### Reschedule Flow:
+1. Confirm their name (you may already have it from CRM)
+2. Ask what new date/time they'd like
+3. Call `check_availability` for the new slot
+4. If available, call `reschedule_booking(customer_name, new_start_time, new_end_time, is_event, customer_phone)`
+   - The server automatically moves the calendar event and adds a reschedule note
+   - For events (is_event: true), the server adds the 1-hour buffers automatically
+   - For tours (is_event: false), no buffers
+5. Confirm: "All done! I've moved your [tour/event] to [new date] at [new time]."
+6. If the new slot is NOT available, offer alternatives: "That time isn't available. Would [alternative] work?"
+
+### Reschedule Examples:
+Reschedule a tour to Friday at 3 PM:
+→ check_availability(start_time: "2026-03-07T15:00:00-05:00", end_time: "2026-03-07T16:00:00-05:00", is_event: false)
+→ reschedule_booking(customer_name: "Sarah Johnson", new_start_time: "2026-03-07T15:00:00-05:00", new_end_time: "2026-03-07T16:00:00-05:00", is_event: false, customer_phone: "+18565551234")
+
+Reschedule a wedding to July 20 at 5 PM:
+→ check_availability(start_time: "2026-07-20T17:00:00-04:00", end_time: "2026-07-20T21:00:00-04:00", is_event: true)
+→ reschedule_booking(customer_name: "Sarah Johnson", new_start_time: "2026-07-20T17:00:00-04:00", new_end_time: "2026-07-20T21:00:00-04:00", is_event: true, customer_phone: "+18565551234")
 
 ## PAYMENT — process_payment
 Only when customer wants to LOCK their date with a deposit:
@@ -147,8 +218,35 @@ Only when customer wants to LOCK their date with a deposit:
    - "The three-digit security code on the back?"
    - "And the billing zip code?"
 3. Call `process_payment`
-4. If successful, call `book_appointment` with "CONFIRMED" prefix
+4. If successful, call `update_booking` with customer_name, payment_amount, confirmation_number, customer_phone, and customer_email — this automatically updates the calendar from PENCILED to CONFIRMED and updates the CRM
 5. Call `send_booking_email` to send confirmation
+
+## RETURNING CALLERS / MAKING A PAYMENT
+**The customer's phone number is their account identifier.** Every caller's phone number is captured from Caller ID automatically.
+
+If CRM data is present in your system prompt (injected at call start), you will see the customer's:
+- Name, email, venue, event type, event date
+- Past payment info, confirmation numbers
+- Previous call notes
+
+### When a returning customer calls to make a payment:
+1. Greet them by name if you have it from CRM: "Welcome back, [Name]!"
+2. Confirm what they're calling about: "Are you calling to secure your [event type] at [venue] on [date]?"
+3. Confirm the deposit amount (50% of venue rental)
+4. Collect card info ONE field at a time (same as above)
+5. Call `process_payment`
+6. If successful, call `update_booking` — this changes PENCILED → CONFIRMED on the calendar and updates the CRM with payment details
+7. Call `send_booking_email` to send confirmation
+8. Do NOT ask for their phone number — you already have it from caller ID
+
+### When a returning customer calls for info:
+- Use CRM data to personalize: "I see you were interested in [venue] for a [event type]. How can I help?"
+- Don't make them repeat information you already have
+
+### CRM Tracking:
+- Every interaction updates the CRM via phone number
+- Payment amounts, dates, and confirmation numbers are tracked
+- The calendar event description gets payment history appended
 
 ## CONVERSATION STYLE
 - Be concise — this is a phone call, not an email
@@ -400,6 +498,44 @@ def inbound_call():
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/booking-email-tool"}
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "update_booking",
+                                "description": "Update an existing PENCILED calendar event to CONFIRMED after payment. Searches by customer name, updates summary and adds payment details. Also updates CRM.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "customer_name": {"type": "string", "description": "Customer full name to search for in calendar"},
+                                        "payment_amount": {"type": "string", "description": "Amount paid, e.g. '1897.50'"},
+                                        "confirmation_number": {"type": "string", "description": "Payment confirmation number from process_payment"},
+                                        "customer_phone": {"type": "string", "description": "Customer phone (from caller ID)"},
+                                        "customer_email": {"type": "string", "description": "Customer email address"}
+                                    },
+                                    "required": ["customer_name", "payment_amount", "confirmation_number"]
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
+                        },
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "reschedule_booking",
+                                "description": "Reschedule an existing booking (tour or event) to a new date/time. Searches by customer name, checks new slot availability, moves the calendar event, and updates CRM.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "customer_name": {"type": "string", "description": "Customer full name to search for in calendar"},
+                                        "new_start_time": {"type": "string", "description": "New ISO 8601 start datetime with timezone"},
+                                        "new_end_time": {"type": "string", "description": "New ISO 8601 end datetime with timezone"},
+                                        "is_event": {"type": "boolean", "description": "true for events (adds 1hr buffer), false for tours"},
+                                        "customer_phone": {"type": "string", "description": "Customer phone (from caller ID)"}
+                                    },
+                                    "required": ["customer_name", "new_start_time", "new_end_time", "is_event"]
+                                }
+                            },
+                            "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
                         }
                     ]
                 },
@@ -409,16 +545,25 @@ def inbound_call():
             }
         }
 
-        # CRM History Injection
+        # CRM History Injection + Caller ID Phone Number
         try:
             phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
             if not phone:
                 phone = data.get('message', {}).get('customer', {}).get('number')
             if phone:
+                # Always inject the caller's phone number so Jessica knows it
+                phone_inject = f"\n\n## CALLER INFO (from Caller ID)\n- Phone: {phone}\n- You already have this number. Do NOT ask for it."
+                response["assistant"]["model"]["messages"][0]["content"] += phone_inject
+                print(f"CALLER ID: {phone}")
+
+                # CRM lookup for returning customers
                 customer_data = crm_service.get_customer(phone)
                 if customer_data:
                     history_text = crm_service.format_history_for_prompt(customer_data)
                     response["assistant"]["model"]["messages"][0]["content"] += history_text
+                    print(f"CRM: Returning customer found for {phone}")
+                else:
+                    print(f"CRM: New customer {phone}")
         except Exception as e:
             print(f"CRM Lookup Failed: {e}")
 
@@ -481,6 +626,9 @@ def calendar_tool_route():
             start_iso = args.get('start_time')
             end_iso = args.get('end_time')
             is_event = args.get('is_event', False)
+            summary = args.get('summary', '')
+            
+            # Apply buffer for events
             if is_event:
                 try:
                     s = datetime.fromisoformat(start_iso.replace('Z', '+00:00'))
@@ -488,10 +636,237 @@ def calendar_tool_route():
                     start_iso = (s - timedelta(hours=1)).isoformat()
                     end_iso = (e + timedelta(hours=1)).isoformat()
                 except: pass
-            result = calendar_service.book_appointment(
-                args.get('summary'), start_iso, end_iso,
-                args.get('attendee_email'), args.get('description', '')
-            )
+
+            # Extract venue from summary and look up address
+            location = ''
+            summary_lower = summary.lower()
+            for venue_key, address in VENUE_ADDRESSES.items():
+                if venue_key in summary_lower:
+                    location = address
+                    break
+
+            try:
+                from google.oauth2 import service_account
+                from googleapiclient.discovery import build
+
+                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                creds = service_account.Credentials.from_service_account_info(
+                    sa_info, scopes=['https://www.googleapis.com/auth/calendar']
+                )
+                service = build('calendar', 'v3', credentials=creds)
+                calendar_id = os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
+                event_body = {
+                    'summary': summary,
+                    'location': location,
+                    'description': args.get('description', ''),
+                    'start': {'dateTime': start_iso, 'timeZone': 'America/New_York'},
+                    'end': {'dateTime': end_iso, 'timeZone': 'America/New_York'},
+                }
+                attendee_email = args.get('attendee_email')
+                if attendee_email:
+                    event_body['attendees'] = [{'email': attendee_email}]
+
+                created = service.events().insert(
+                    calendarId=calendar_id,
+                    body=event_body,
+                    sendUpdates='none'
+                ).execute()
+
+                result = f"Booked: {summary} on {start_iso}. Event ID: {created.get('id', 'N/A')}"
+                print(f"BOOKED: {summary} | Location: {location} | ID: {created.get('id')}")
+
+            except Exception as e:
+                result = f"Booking error: {str(e)}"
+                print(f"Book Appointment Error: {traceback.format_exc()}")
+        elif function_name == 'update_booking':
+            # Search for PENCILED event and update to CONFIRMED with payment details
+            customer_name = args.get('customer_name', '')
+            payment_amount = args.get('payment_amount', '')
+            confirmation_number = args.get('confirmation_number', '')
+            customer_phone = args.get('customer_phone', '')
+            customer_email = args.get('customer_email', '')
+
+            try:
+                from google.oauth2 import service_account
+                from googleapiclient.discovery import build
+
+                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                creds = service_account.Credentials.from_service_account_info(
+                    sa_info, scopes=['https://www.googleapis.com/auth/calendar']
+                )
+                service = build('calendar', 'v3', credentials=creds)
+                calendar_id = os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
+                # Search upcoming events for PENCILED with this customer's name
+                now = datetime.utcnow().isoformat() + 'Z'
+                events_result = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=now,
+                    maxResults=50,
+                    singleEvents=True,
+                    orderBy='startTime',
+                    q=f"PENCILED {customer_name}"
+                ).execute()
+                events = events_result.get('items', [])
+
+                if not events:
+                    result = f"No penciled booking found for {customer_name}. Please create a new confirmed booking instead."
+                else:
+                    event = events[0]  # Most relevant match
+                    old_summary = event.get('summary', '')
+                    new_summary = old_summary.replace('PENCILED', 'CONFIRMED')
+
+                    # Build updated description with payment history
+                    existing_desc = event.get('description', '')
+                    payment_note = f"\n--- PAYMENT RECEIVED ---\nAmount: ${payment_amount}\nConfirmation: {confirmation_number}\nDate: {datetime.now().strftime('%m/%d/%Y %I:%M %p')}\nPhone: {customer_phone}\nEmail: {customer_email}\n"
+                    new_desc = existing_desc + payment_note
+
+                    event['summary'] = new_summary
+                    event['description'] = new_desc
+
+                    # Ensure location is set from venue in summary
+                    if not event.get('location'):
+                        summary_lower = new_summary.lower()
+                        for venue_key, address in VENUE_ADDRESSES.items():
+                            if venue_key in summary_lower:
+                                event['location'] = address
+                                break
+
+                    updated = service.events().update(
+                        calendarId=calendar_id,
+                        eventId=event['id'],
+                        body=event
+                    ).execute()
+
+                    result = f"Booking updated: {new_summary}. Calendar event confirmed with payment of ${payment_amount}."
+                    print(f"CALENDAR UPDATED: {old_summary} -> {new_summary}")
+
+                    # Update CRM with payment
+                    phone = customer_phone or None
+                    if not phone:
+                        try:
+                            phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+                        except: pass
+                    if phone:
+                        crm_service.upsert_customer(phone, {
+                            "name": customer_name,
+                            "email": customer_email,
+                            "last_payment_amount": payment_amount,
+                            "last_payment_date": datetime.now().strftime("%Y-%m-%d"),
+                            "confirmation_number": confirmation_number,
+                            "status": "CONFIRMED",
+                            "notes": f"Payment ${payment_amount} received. Conf: {confirmation_number}. Booking confirmed.",
+                        })
+
+            except Exception as e:
+                result = f"Error updating booking: {str(e)}"
+                print(f"Update Booking Error: {traceback.format_exc()}")
+
+        elif function_name == 'reschedule_booking':
+            # Search for existing event by customer name/phone and move to new date
+            customer_name = args.get('customer_name', '')
+            new_start = args.get('new_start_time', '')
+            new_end = args.get('new_end_time', '')
+            is_event = args.get('is_event', False)
+            customer_phone = args.get('customer_phone', '')
+
+            try:
+                from google.oauth2 import service_account
+                from googleapiclient.discovery import build
+
+                sa_info = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+                creds = service_account.Credentials.from_service_account_info(
+                    sa_info, scopes=['https://www.googleapis.com/auth/calendar']
+                )
+                service = build('calendar', 'v3', credentials=creds)
+                calendar_id = os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
+                # Search upcoming events for this customer
+                now = datetime.utcnow().isoformat() + 'Z'
+                events_result = service.events().list(
+                    calendarId=calendar_id,
+                    timeMin=now,
+                    maxResults=50,
+                    singleEvents=True,
+                    orderBy='startTime',
+                    q=customer_name
+                ).execute()
+                events = events_result.get('items', [])
+
+                if not events:
+                    result = f"No upcoming booking found for {customer_name}. Would you like to book a new appointment?"
+                else:
+                    event = events[0]
+                    old_start = event.get('start', {}).get('dateTime', 'unknown')
+                    old_summary = event.get('summary', '')
+
+                    # Apply buffer for events
+                    actual_start = new_start
+                    actual_end = new_end
+                    if is_event:
+                        try:
+                            s = datetime.fromisoformat(new_start.replace('Z', '+00:00'))
+                            e = datetime.fromisoformat(new_end.replace('Z', '+00:00'))
+                            actual_start = (s - timedelta(hours=1)).isoformat()
+                            actual_end = (e + timedelta(hours=1)).isoformat()
+                        except: pass
+
+                    # First check if new slot is available
+                    freebusy = service.freebusy().query(body={
+                        "timeMin": actual_start,
+                        "timeMax": actual_end,
+                        "items": [{"id": calendar_id}]
+                    }).execute()
+                    busy = freebusy.get('calendars', {}).get(calendar_id, {}).get('busy', [])
+
+                    # Filter out the current event from busy check
+                    event_id = event.get('id')
+                    if busy:
+                        result = f"Sorry, the new date/time is not available. Please choose a different time."
+                    else:
+                        # Update the event with new times
+                        event['start'] = {'dateTime': actual_start, 'timeZone': 'America/New_York'}
+                        event['end'] = {'dateTime': actual_end, 'timeZone': 'America/New_York'}
+
+                        # Add reschedule note to description
+                        existing_desc = event.get('description', '')
+                        reschedule_note = f"\n--- RESCHEDULED ---\nFrom: {old_start}\nTo: {new_start}\nDate: {datetime.now().strftime('%m/%d/%Y %I:%M %p')}\n"
+                        event['description'] = existing_desc + reschedule_note
+
+                        # Ensure location is set from venue in summary
+                        if not event.get('location'):
+                            summary_lower = old_summary.lower()
+                            for venue_key, address in VENUE_ADDRESSES.items():
+                                if venue_key in summary_lower:
+                                    event['location'] = address
+                                    break
+
+                        updated = service.events().update(
+                            calendarId=calendar_id,
+                            eventId=event_id,
+                            body=event
+                        ).execute()
+
+                        result = f"Booking rescheduled successfully. '{old_summary}' has been moved to the new date and time."
+                        print(f"RESCHEDULED: {old_summary} from {old_start} to {new_start}")
+
+                        # Update CRM
+                        phone = customer_phone or None
+                        if not phone:
+                            try:
+                                phone = data.get('message', {}).get('call', {}).get('customer', {}).get('number')
+                            except: pass
+                        if phone:
+                            crm_service.upsert_customer(phone, {
+                                "name": customer_name,
+                                "notes": f"Rescheduled from {old_start} to {new_start}",
+                            })
+
+            except Exception as e:
+                result = f"Error rescheduling: {str(e)}"
+                print(f"Reschedule Error: {traceback.format_exc()}")
+
     except Exception as e:
         result = f"Error: {str(e)}"
         print(f"Calendar Error: {e}")
