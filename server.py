@@ -122,6 +122,29 @@ Our professional design team transforms your venue with a fully custom themed se
 - If the customer adds the Custom Theme Room Design, mention: "If you have any inspiration photos for your theme, feel free to text two photos to this number. It's totally optional, but it helps our design team bring your vision to life."
 - This is optional — do not pressure them. Just a friendly suggestion.
 
+## CONTRACTS — AUTO-GENERATED FOR EVERY BOOKING
+**A contract is automatically generated every time you book an appointment.** You don't need to do anything extra — the system handles it. Here's what happens:
+
+1. **When you call `book_appointment`:** Include ALL the contract fields (customer_name, event_type, venue, total_price, deposit_amount, guest_count, event_time, themed_setup, early_bird, etc.)
+2. **The system automatically:**
+   - Generates a professional PDF contract with all event details, pricing, payment history, and terms & conditions
+   - Emails the contract to the customer AND to natashashoe4@gmail.com
+   - Stores the contract in Google Drive under "Event Contracts" folder, named: "CustomerName - EventType - Date.pdf"
+3. **When a payment is made and you call `update_booking`:** Include the `total_price` so the contract can calculate the remaining balance. The system will:
+   - Regenerate the contract showing CONFIRMED status and payment received
+   - Re-email the updated contract to customer + management
+   - Replace the old contract in Google Drive with the updated version
+
+**IMPORTANT:** Make sure to collect all booking details BEFORE calling book_appointment so the contract is complete:
+- Customer name, email, phone
+- Event type, venue, date, time
+- Guest count
+- Total price (including add-ons like Custom Theme Room Design)
+- Deposit amount (50% of total)
+- Whether Early Bird or Themed Setup applies
+
+Tell the customer: "You'll receive your event contract by email shortly with all the details and terms."
+
 ## EMAIL COLLECTION — CRITICAL RULES
 **ALWAYS collect email after penciling in a date OR when a customer wants package info.**
 You MUST actually call `send_info_email` — NEVER skip it or make excuses.
@@ -369,6 +392,377 @@ def generate_pdf_receipt(data, filename):
     return True
 
 # =====================================================
+# CONTRACT SYSTEM — Generate, Email, Store in Google Drive
+# =====================================================
+CONTRACTS_FOLDER_NAME = "Event Contracts"
+CONTRACT_RECIPIENT = "natashashoe4@gmail.com"
+
+def get_gdrive_service():
+    """Get authenticated Google Drive service using service account."""
+    from google.oauth2 import service_account as sa_module
+    from googleapiclient.discovery import build
+    sa_info = json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON', '{}'))
+    creds = sa_module.Credentials.from_service_account_info(
+        sa_info, scopes=[
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/drive.file'
+        ]
+    )
+    return build('drive', 'v3', credentials=creds)
+
+def find_or_create_folder(drive_service, folder_name, parent_id=None):
+    """Find existing folder or create it. Returns folder ID."""
+    query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    if parent_id:
+        query += f" and '{parent_id}' in parents"
+    results = drive_service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+    files = results.get('files', [])
+    if files:
+        return files[0]['id']
+    # Create folder
+    metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder'
+    }
+    if parent_id:
+        metadata['parents'] = [parent_id]
+    folder = drive_service.files().create(body=metadata, fields='id').execute()
+    print(f"DRIVE: Created folder '{folder_name}' -> {folder.get('id')}")
+    return folder.get('id')
+
+def upload_or_replace_contract(drive_service, folder_id, filename, filepath):
+    """Upload PDF to Drive folder; replace if same filename exists."""
+    from googleapiclient.http import MediaFileUpload
+
+    # Check if file already exists in folder
+    query = f"name='{filename}' and '{folder_id}' in parents and trashed=false"
+    results = drive_service.files().list(q=query, spaces='drive', fields='files(id)').execute()
+    existing = results.get('files', [])
+
+    media = MediaFileUpload(filepath, mimetype='application/pdf', resumable=True)
+
+    if existing:
+        # Update existing file
+        file_id = existing[0]['id']
+        updated = drive_service.files().update(
+            fileId=file_id, media_body=media, fields='id, webViewLink'
+        ).execute()
+        print(f"DRIVE: Updated contract '{filename}' -> {updated.get('id')}")
+        return updated
+    else:
+        # Create new file
+        metadata = {
+            'name': filename,
+            'parents': [folder_id]
+        }
+        created = drive_service.files().create(
+            body=metadata, media_body=media, fields='id, webViewLink'
+        ).execute()
+        print(f"DRIVE: Uploaded contract '{filename}' -> {created.get('id')}")
+        return created
+
+def generate_contract_pdf(contract_data, filepath):
+    """Generate a professional event contract PDF."""
+    if not HAS_REPORTLAB:
+        return False
+
+    doc = SimpleDocTemplate(filepath, pagesize=LETTER,
+                            topMargin=40, bottomMargin=40,
+                            leftMargin=50, rightMargin=50)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # Header
+    elements.append(Paragraph("NATASHA MAE'S ENTERPRISES", styles['Title']))
+    elements.append(Paragraph("Event Venue Contract", styles['Heading2']))
+    elements.append(Spacer(1, 6))
+
+    status = contract_data.get('status', 'PENCILED')
+    status_color = 'green' if status == 'CONFIRMED' else 'orange'
+    elements.append(Paragraph(
+        f'<font color="{status_color}"><b>Status: {status}</b></font>',
+        styles['Heading3']
+    ))
+    elements.append(Paragraph(
+        f"Contract Date: {datetime.now().strftime('%B %d, %Y')}",
+        styles['Normal']
+    ))
+    elements.append(Spacer(1, 16))
+
+    # Client Info
+    elements.append(Paragraph("CLIENT INFORMATION", styles['Heading3']))
+    client_table = [
+        ["Client Name", contract_data.get('customer_name', 'N/A')],
+        ["Email", contract_data.get('customer_email', 'N/A')],
+        ["Phone", contract_data.get('customer_phone', 'N/A')],
+    ]
+    t = Table(client_table, colWidths=[140, 340])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.Color(0.15, 0.15, 0.3)),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('PADDING', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 16))
+
+    # Event Details
+    elements.append(Paragraph("EVENT DETAILS", styles['Heading3']))
+    venue = contract_data.get('venue', 'N/A')
+    venue_lower = venue.lower() if venue else ''
+    venue_address = VENUE_ADDRESSES.get(venue_lower, '')
+    for vk, va in VENUE_ADDRESSES.items():
+        if vk in venue_lower:
+            venue_address = va
+            break
+
+    event_table = [
+        ["Event Type", contract_data.get('event_type', 'N/A')],
+        ["Venue", venue],
+        ["Venue Address", venue_address or 'See website'],
+        ["Event Date", contract_data.get('event_date', 'N/A')],
+        ["Event Time", contract_data.get('event_time', 'N/A')],
+        ["Duration", "4 hours (plus 1hr setup + 1hr cleanup)"],
+        ["Estimated Guests", str(contract_data.get('guest_count', 'N/A'))],
+    ]
+    if contract_data.get('themed_setup'):
+        event_table.append(["Custom Theme Design", "YES — $500 Add-On"])
+        if contract_data.get('theme_description'):
+            event_table.append(["Theme", contract_data.get('theme_description')])
+
+    t = Table(event_table, colWidths=[140, 340])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.Color(0.15, 0.15, 0.3)),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('PADDING', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 16))
+
+    # Financial Summary
+    elements.append(Paragraph("FINANCIAL SUMMARY", styles['Heading3']))
+    total = contract_data.get('total_price', '0')
+    deposit = contract_data.get('deposit_amount', '0')
+    paid = contract_data.get('total_paid', '0')
+    balance = contract_data.get('balance_due', '0')
+    early_bird = contract_data.get('early_bird', False)
+
+    finance_table = [
+        ["Venue Rental", f"${contract_data.get('venue_price', total)}"],
+    ]
+    if contract_data.get('themed_setup'):
+        finance_table.append(["Custom Theme Room Design", "$500.00"])
+    if early_bird:
+        finance_table.append(["Early Bird Discount (50% OFF)", "Applied"])
+    finance_table.extend([
+        ["", ""],
+        ["TOTAL PACKAGE", f"${total}"],
+        ["Required Deposit (50%)", f"${deposit}"],
+        ["Total Paid", f"${paid}"],
+        ["BALANCE DUE", f"${balance}"],
+    ])
+    t = Table(finance_table, colWidths=[240, 240])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, -1), (-1, -1), colors.Color(0.9, 0.95, 1.0)),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('PADDING', (0, 0), (-1, -1), 8),
+        ('FONTNAME', (0, -4), (-1, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, -1), (-1, -1), 12),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 8))
+    elements.append(Paragraph("<i>Balance due 10 days before event date.</i>", styles['Normal']))
+    elements.append(Spacer(1, 16))
+
+    # Payment History
+    payments = contract_data.get('payments', [])
+    if payments:
+        elements.append(Paragraph("PAYMENT HISTORY", styles['Heading3']))
+        pay_rows = [["Date", "Amount", "Confirmation #"]]
+        for p in payments:
+            pay_rows.append([p.get('date', ''), f"${p.get('amount', '0')}", p.get('confirmation', '')])
+        t = Table(pay_rows, colWidths=[160, 160, 160])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.15, 0.15, 0.3)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('PADDING', (0, 0), (-1, -1), 6),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 16))
+
+    # Confirmation
+    if contract_data.get('confirmation_number'):
+        elements.append(Paragraph(
+            f"<b>Confirmation Number: {contract_data['confirmation_number']}</b>",
+            styles['Heading3']
+        ))
+        elements.append(Spacer(1, 12))
+
+    # Terms & Conditions
+    elements.append(Paragraph("TERMS & CONDITIONS", styles['Heading3']))
+    terms = [
+        "1. A non-refundable deposit of 50% of the total package is required to secure your date.",
+        "2. The remaining balance is due no later than 10 days before the event date.",
+        "3. A licensed security guard is mandatory for all events at $35 per hour.",
+        "4. Your booking includes a 4-hour event window with 1-hour setup before and 1-hour cleanup after (6-hour total venue access).",
+        "5. Cancellations must be submitted in writing at least 30 days prior to the event for a date transfer credit.",
+        "6. Cancellations made less than 30 days before the event will forfeit the deposit.",
+        "7. Natasha Mae's Enterprises reserves the right to terminate an event if it violates venue policies or presents a safety concern.",
+        "8. The client is responsible for any damages to the venue or property during the event.",
+        "9. Custom Theme Room Design add-ons are non-refundable once the design process has begun.",
+        "10. By making a deposit, the client agrees to all terms outlined in this contract.",
+    ]
+    for term in terms:
+        elements.append(Paragraph(term, styles['Normal']))
+        elements.append(Spacer(1, 4))
+
+    elements.append(Spacer(1, 24))
+    elements.append(Paragraph("__________________________________", styles['Normal']))
+    elements.append(Paragraph("Client Signature / Date", styles['Normal']))
+    elements.append(Spacer(1, 16))
+    elements.append(Paragraph("__________________________________", styles['Normal']))
+    elements.append(Paragraph("Natasha Mae's Enterprises / Date", styles['Normal']))
+
+    elements.append(Spacer(1, 24))
+    elements.append(Paragraph(
+        "<b>Natasha Mae's Enterprises</b> | www.natashamaes.com | info@natashamaes.com",
+        styles['Normal']
+    ))
+
+    doc.build(elements)
+    return True
+
+def send_contract_emails(contract_data, pdf_path, is_update=False):
+    """Send contract PDF to customer AND natashashoe4@gmail.com."""
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        print("CONTRACT EMAIL: Email not configured")
+        return False
+
+    customer_email = contract_data.get('customer_email')
+    customer_name = contract_data.get('customer_name', 'Customer')
+    event_type = contract_data.get('event_type', 'Event')
+    venue = contract_data.get('venue', '')
+    status = contract_data.get('status', 'PENCILED')
+
+    if is_update:
+        subject_customer = f"Updated Contract — {event_type} at {venue} | Natasha Mae's"
+        subject_mgmt = f"CONTRACT UPDATED: {customer_name} — {event_type} at {venue}"
+        body = f"""Dear {customer_name},
+
+Please find your UPDATED event contract attached. Your payment has been received and your contract has been updated to reflect the new balance.
+
+Status: {status}
+
+If you have any questions, please don't hesitate to reach out.
+
+Thank you for choosing Natasha Mae's Enterprises!
+www.natashamaes.com | info@natashamaes.com
+"""
+    else:
+        subject_customer = f"Your Event Contract — {event_type} at {venue} | Natasha Mae's"
+        subject_mgmt = f"NEW CONTRACT: {customer_name} — {event_type} at {venue}"
+        body = f"""Dear {customer_name},
+
+Thank you for your interest in Natasha Mae's Enterprises! Please find your event contract attached.
+
+Status: {status}
+
+{"Your date is penciled in. To officially lock your date, a 50% deposit is required." if status == "PENCILED" else "Your date is CONFIRMED! Thank you for your deposit."}
+
+If you have any questions, please don't hesitate to reach out.
+
+Thank you for choosing Natasha Mae's Enterprises!
+www.natashamaes.com | info@natashamaes.com
+"""
+
+    recipients = []
+    if customer_email:
+        recipients.append((customer_email, subject_customer))
+    recipients.append((CONTRACT_RECIPIENT, subject_mgmt))
+
+    for recipient, subject in recipients:
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = f"Natasha Mae's <{EMAIL_SENDER}>"
+            msg['To'] = recipient
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            if pdf_path and os.path.exists(pdf_path):
+                with open(pdf_path, 'rb') as f:
+                    pdf_attach = MIMEApplication(f.read(), _subtype='pdf')
+                    safe_name = f"{customer_name.replace(' ', '_')}_{event_type}_Contract.pdf"
+                    pdf_attach.add_header('Content-Disposition', 'attachment', filename=safe_name)
+                    msg.attach(pdf_attach)
+            server = smtplib.SMTP('smtp.gmail.com', 587)
+            server.starttls()
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            print(f"CONTRACT EMAIL sent to {recipient}")
+        except Exception as e:
+            print(f"CONTRACT EMAIL ERROR ({recipient}): {e}")
+
+    return True
+
+def store_contract_gdrive(contract_data, pdf_path):
+    """Upload contract PDF to Google Drive under Event Contracts folder."""
+    try:
+        drive_service = get_gdrive_service()
+
+        # Find or create "Event Contracts" root folder
+        root_folder_id = find_or_create_folder(drive_service, CONTRACTS_FOLDER_NAME)
+
+        # Build filename: "CustomerName - EventType - Date.pdf"
+        customer_name = contract_data.get('customer_name', 'Unknown')
+        event_type = contract_data.get('event_type', 'Event')
+        event_date = contract_data.get('event_date', datetime.now().strftime('%Y-%m-%d'))
+        filename = f"{customer_name} - {event_type} - {event_date}.pdf"
+
+        file_result = upload_or_replace_contract(drive_service, root_folder_id, filename, pdf_path)
+        print(f"DRIVE: Contract stored as '{filename}'")
+        return file_result
+    except Exception as e:
+        print(f"DRIVE CONTRACT ERROR: {traceback.format_exc()}")
+        return None
+
+def handle_contract(contract_data, is_update=False):
+    """Master function: generate contract PDF, email it, store in Drive."""
+    pdf_path = None
+    try:
+        pdf_path = tempfile.mktemp(suffix='.pdf')
+        success = generate_contract_pdf(contract_data, pdf_path)
+        if not success:
+            print("CONTRACT: PDF generation failed (reportlab missing?)")
+            return "Contract generation failed."
+
+        # Email to customer + natashashoe4@gmail.com
+        send_contract_emails(contract_data, pdf_path, is_update=is_update)
+
+        # Store in Google Drive
+        drive_result = store_contract_gdrive(contract_data, pdf_path)
+        drive_status = "stored in Drive" if drive_result else "Drive upload failed"
+
+        action = "updated" if is_update else "created"
+        print(f"CONTRACT: {action} for {contract_data.get('customer_name')} | {drive_status}")
+        return f"Contract {action}, emailed, and {drive_status}."
+
+    except Exception as e:
+        print(f"CONTRACT ERROR: {traceback.format_exc()}")
+        return f"Contract error: {str(e)}"
+    finally:
+        if pdf_path and os.path.exists(pdf_path):
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
+
+# =====================================================
 # MAIN INBOUND ROUTE
 # =====================================================
 @app.route('/inbound', methods=['POST'])
@@ -454,7 +848,7 @@ def inbound_call():
                             "type": "function",
                             "function": {
                                 "name": "book_appointment",
-                                "description": "Books or pencils in a date on the calendar. Use 'PENCILED - ' prefix for holds, 'CONFIRMED - ' prefix for paid bookings.",
+                                "description": "Books or pencils in a date on the calendar AND auto-generates a contract PDF (emailed to customer + management, stored in Google Drive).",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -462,10 +856,23 @@ def inbound_call():
                                         "start_time": {"type": "string", "description": "ISO 8601 start datetime with timezone"},
                                         "end_time": {"type": "string", "description": "ISO 8601 end datetime with timezone"},
                                         "is_event": {"type": "boolean", "description": "true for events, false for tours"},
-                                        "attendee_email": {"type": "string", "description": "Optional: customer email"},
-                                        "description": {"type": "string", "description": "Optional: booking notes, phone number, guest count"}
+                                        "attendee_email": {"type": "string", "description": "Customer email address"},
+                                        "description": {"type": "string", "description": "Booking notes, phone number, guest count, THEMED SETUP if applicable"},
+                                        "customer_name": {"type": "string", "description": "Customer full name"},
+                                        "customer_phone": {"type": "string", "description": "Customer phone number"},
+                                        "event_type": {"type": "string", "description": "Birthday, Wedding, Sweet 16, Corporate, etc."},
+                                        "venue": {"type": "string", "description": "The Vault, Liberty Palace, or Frankford Ave"},
+                                        "event_time": {"type": "string", "description": "Event time e.g. 6:00 PM - 10:00 PM"},
+                                        "guest_count": {"type": "string", "description": "Estimated number of guests"},
+                                        "total_price": {"type": "string", "description": "Total package price including add-ons"},
+                                        "venue_price": {"type": "string", "description": "Base venue rental price before add-ons"},
+                                        "deposit_amount": {"type": "string", "description": "50% deposit amount"},
+                                        "themed_setup": {"type": "boolean", "description": "true if Custom Theme Room Design $500 add-on"},
+                                        "theme_description": {"type": "string", "description": "Customer's theme if themed_setup is true"},
+                                        "early_bird": {"type": "boolean", "description": "true if Early Bird 50% off applied"},
+                                        "confirmation_number": {"type": "string", "description": "Payment confirmation if already paid"}
                                     },
-                                    "required": ["summary", "start_time", "end_time", "is_event"]
+                                    "required": ["summary", "start_time", "end_time", "is_event", "customer_name", "event_type", "venue", "total_price", "deposit_amount"]
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
@@ -548,7 +955,7 @@ def inbound_call():
                             "type": "function",
                             "function": {
                                 "name": "update_booking",
-                                "description": "Update an existing PENCILED calendar event to CONFIRMED after payment. Searches by customer name, updates summary and adds payment details. Also updates CRM.",
+                                "description": "Update an existing PENCILED calendar event to CONFIRMED after payment. Updates calendar, CRM, AND regenerates contract with payment details (emailed + stored in Drive).",
                                 "parameters": {
                                     "type": "object",
                                     "properties": {
@@ -556,9 +963,13 @@ def inbound_call():
                                         "payment_amount": {"type": "string", "description": "Amount paid, e.g. '1897.50'"},
                                         "confirmation_number": {"type": "string", "description": "Payment confirmation number from process_payment"},
                                         "customer_phone": {"type": "string", "description": "Customer phone (from caller ID)"},
-                                        "customer_email": {"type": "string", "description": "Customer email address"}
+                                        "customer_email": {"type": "string", "description": "Customer email address"},
+                                        "total_price": {"type": "string", "description": "Total package price so contract can show balance"},
+                                        "venue": {"type": "string", "description": "Venue name for contract"},
+                                        "event_time": {"type": "string", "description": "Event time for contract"},
+                                        "guest_count": {"type": "string", "description": "Guest count for contract"}
                                     },
-                                    "required": ["customer_name", "payment_amount", "confirmation_number"]
+                                    "required": ["customer_name", "payment_amount", "confirmation_number", "total_price"]
                                 }
                             },
                             "server": {"url": "https://natashavapi.onrender.com/calendar-tool"}
@@ -722,6 +1133,42 @@ def calendar_tool_route():
                 result = f"Booked: {summary} on {start_iso}. Event ID: {created.get('id', 'N/A')}"
                 print(f"BOOKED: {summary} | Location: {location} | ID: {created.get('id')}")
 
+                # --- AUTO-GENERATE CONTRACT ---
+                try:
+                    desc = args.get('description', '')
+                    contract_data = {
+                        'customer_name': args.get('customer_name', summary.split(' - ')[-1] if ' - ' in summary else 'Customer'),
+                        'customer_email': args.get('attendee_email', ''),
+                        'customer_phone': args.get('customer_phone', ''),
+                        'event_type': args.get('event_type', summary.split(' - ')[1] if summary.count(' - ') >= 2 else 'Event'),
+                        'venue': args.get('venue', ''),
+                        'event_date': args.get('start_time', start_iso)[:10],
+                        'event_time': args.get('event_time', ''),
+                        'guest_count': args.get('guest_count', ''),
+                        'total_price': args.get('total_price', '0'),
+                        'venue_price': args.get('venue_price', args.get('total_price', '0')),
+                        'deposit_amount': args.get('deposit_amount', '0'),
+                        'total_paid': '0',
+                        'balance_due': args.get('total_price', '0'),
+                        'themed_setup': 'THEMED' in desc.upper() or args.get('themed_setup', False),
+                        'theme_description': args.get('theme_description', ''),
+                        'early_bird': args.get('early_bird', False),
+                        'status': 'CONFIRMED' if 'CONFIRMED' in summary.upper() else 'PENCILED',
+                        'confirmation_number': args.get('confirmation_number', ''),
+                        'payments': [],
+                    }
+                    # Extract phone from caller ID if not provided
+                    if not contract_data['customer_phone']:
+                        try:
+                            contract_data['customer_phone'] = data.get('message', {}).get('call', {}).get('customer', {}).get('number', '')
+                        except: pass
+
+                    contract_result = handle_contract(contract_data, is_update=False)
+                    result += f" | Contract: {contract_result}"
+                except Exception as ce:
+                    print(f"CONTRACT AUTO-GEN ERROR: {traceback.format_exc()}")
+                    result += " | Contract generation failed (booking still saved)."
+
             except Exception as e:
                 result = f"Booking error: {str(e)}"
                 print(f"Book Appointment Error: {traceback.format_exc()}")
@@ -804,6 +1251,55 @@ def calendar_tool_route():
                             "status": "CONFIRMED",
                             "notes": f"Payment ${payment_amount} received. Conf: {confirmation_number}. Booking confirmed.",
                         })
+
+                    # --- UPDATE CONTRACT WITH PAYMENT ---
+                    try:
+                        # Parse event info from calendar event
+                        event_start = event.get('start', {}).get('dateTime', '')
+                        event_venue = event.get('location', '')
+                        # Extract event type from summary (format: "CONFIRMED - EventType - Venue - Name")
+                        summary_parts = new_summary.split(' - ')
+                        event_type = summary_parts[1] if len(summary_parts) > 2 else 'Event'
+
+                        total_price = args.get('total_price', '0')
+                        deposit_amount = args.get('deposit_amount', payment_amount)
+
+                        # Calculate balance
+                        try:
+                            bal = float(total_price) - float(payment_amount)
+                            balance_str = f"{bal:.2f}"
+                        except:
+                            balance_str = "0"
+
+                        contract_data = {
+                            'customer_name': customer_name,
+                            'customer_email': customer_email,
+                            'customer_phone': customer_phone or phone or '',
+                            'event_type': event_type,
+                            'venue': event_venue or args.get('venue', ''),
+                            'event_date': event_start[:10] if event_start else '',
+                            'event_time': args.get('event_time', ''),
+                            'guest_count': args.get('guest_count', ''),
+                            'total_price': total_price,
+                            'venue_price': args.get('venue_price', total_price),
+                            'deposit_amount': deposit_amount,
+                            'total_paid': payment_amount,
+                            'balance_due': balance_str,
+                            'themed_setup': 'THEMED' in new_desc.upper(),
+                            'early_bird': 'early bird' in new_desc.lower(),
+                            'status': 'CONFIRMED',
+                            'confirmation_number': confirmation_number,
+                            'payments': [{
+                                'date': datetime.now().strftime('%m/%d/%Y'),
+                                'amount': payment_amount,
+                                'confirmation': confirmation_number
+                            }],
+                        }
+                        contract_result = handle_contract(contract_data, is_update=True)
+                        result += f" | Contract: {contract_result}"
+                    except Exception as ce:
+                        print(f"CONTRACT UPDATE ERROR: {traceback.format_exc()}")
+                        result += " | Contract update failed (booking still confirmed)."
 
             except Exception as e:
                 result = f"Error updating booking: {str(e)}"
