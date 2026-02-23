@@ -64,7 +64,7 @@ def home():
 
 @app.route('/inbound', methods=['POST'])
 def inbound_call():
-    data = request.json
+    data = request.json or {}
     message_type = data.get('message', {}).get('type')
     print(f"📞 HIT /inbound - TYPE: {message_type}")
 
@@ -324,12 +324,12 @@ def handle_tool_call(data):
 @app.route('/send-sms', methods=['POST'])
 def send_sms_tool():
     """Direct endpoint for SMS tool calls"""
-    return handle_tool_call(request.json)
+    return handle_tool_call(request.json or {})
 
 @app.route('/calendar-tool', methods=['POST'])
 def calendar_tool_route():
     """Endpoint for Calendar tool calls"""
-    data = request.json
+    data = request.json or {}
     print(f"🗓️ CALENDAR TOOL REQUEST: {data}")
     
     # Extract tool call info
