@@ -1,0 +1,43 @@
+﻿{
+    "id":  "8bc95305-e18f-4cf3-8a43-a02241d215e4",
+    "createdAt":  "2026-02-03T05:08:18.849Z",
+    "updatedAt":  "2026-02-04T02:04:17.753Z",
+    "type":  "function",
+    "function":  {
+                     "name":  "send_sms_link",
+                     "description":  "Sends a text message with a link/brochure/invoice to the caller",
+                     "parameters":  {
+                                        "type":  "object",
+                                        "properties":  {
+                                                           "type":  {
+                                                                        "description":  "The type of information to send",
+                                                                        "type":  "string",
+                                                                        "enum":  [
+                                                                                     "tour",
+                                                                                     "packages",
+                                                                                     "registration",
+                                                                                     "invoice",
+                                                                                     "vault_map",
+                                                                                     "liberty_map",
+                                                                                     "frankford_map"
+                                                                                 ]
+                                                                    }
+                                                       },
+                                        "required":  [
+                                                         "type"
+                                                     ]
+                                    }
+                 },
+    "messages":  [
+                     {
+                         "type":  "request-start",
+                         "blocking":  false
+                     }
+                 ],
+    "orgId":  "16b94d32-bddb-439f-9db1-f8f48c5998db",
+    "server":  {
+                   "url":  "https://natashavapi.onrender.com/send-sms",
+                   "timeoutSeconds":  20
+               },
+    "async":  false
+}

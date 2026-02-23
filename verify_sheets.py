@@ -9,9 +9,9 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 def test_sheets():
     print("--- Testing Google Sheets Connection ---")
     
-    refresh_token = os.environ.get("GOOGLE_REFRESH_TOKEN") or input("Paste GOOGLE_REFRESH_TOKEN: ").strip()
-    client_id = os.environ.get("GOOGLE_CLIENT_ID") or input("Paste GOOGLE_CLIENT_ID: ").strip()
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or input("Paste GOOGLE_CLIENT_SECRET: ").strip()
+    refresh_token = os.environ.get("GOOGLE_REFRESH_TOKEN2") or os.environ.get("GOOGLE_REFRESH_TOKEN") or input("Paste GOOGLE_REFRESH_TOKEN: ").strip()
+    client_id = os.environ.get("GOOGLE_CLIENT_ID2") or os.environ.get("GOOGLE_CLIENT_ID") or input("Paste GOOGLE_CLIENT_ID: ").strip()
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET2") or os.environ.get("GOOGLE_CLIENT_SECRET") or input("Paste GOOGLE_CLIENT_SECRET: ").strip()
     sheet_id = os.environ.get("GOOGLE_SHEET_ID") or "12MUWG3t5t9HTEihQzJ3XYKCYWk4es9KJa1i7uOcZEFQ"
     
     if not all([refresh_token, client_id, client_secret, sheet_id]):
